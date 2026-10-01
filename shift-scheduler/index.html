@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>個人排班表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #E9EDF1;
+  --surface: #FFFFFF;
+  --surface-2: #F4F6F9;
+  --ink: #16202C;
+  --muted: #5E6A78;
+  --line: #D3DAE2;
+  --accent: #1F4FD1;
+  --accent-ink: #FFFFFF;
+  --ot: #C77D00;
+  --danger: #C2372E;
+  --ok: #1E8A5A;
+  --weekend: #B23B4E;
+  --shadow: 0 1px 2px rgba(22, 32, 44, .06), 0 8px 24px rgba(22, 32, 44, .08);
+  --tag-size: .85rem;
+  --num: 'Barlow Condensed', 'Noto Sans TC', sans-serif;
+  --sans: 'Noto Sans TC', system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10151C; --surface: #18202A; --surface-2: #1F2934; --ink: #E6EBF1; --muted: #93A0AF;
+    --line: #2C3845; --accent: #7C9DFF; --accent-ink: #0E1A3A; --ot: #F2B33D; --danger: #F07167;
+    --ok: #4CC38A; --weekend: #F08A9B; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10151C; --surface: #18202A; --surface-2: #1F2934; --ink: #E6EBF1; --muted: #93A0AF;
+  --line: #2C3845; --accent: #7C9DFF; --accent-ink: #0E1A3A; --ot: #F2B33D; --danger: #F07167;
+  --ok: #4CC38A; --weekend: #F08A9B; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- 版面 ---------- */
+.app {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-areas: "top top" "cal side";
+  gap: 20px 24px;
+}
+.topbar { grid-area: top; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.calendar-wrap { grid-area: cal; min-width: 0; }
+.side { grid-area: side; display: flex; flex-direction: column; gap: 16px; }
+
+/* 月份標題：大號月份數字就是頁面主視覺 */
+.month-title { display: flex; align-items: flex-end; gap: 10px; margin-right: auto; }
+.month-title .m { font-family: var(--num); font-weight: 700; font-size: 72px; line-height: .8; letter-spacing: -.02em; }
+.month-title .y { display: flex; flex-direction: column; padding-bottom: 2px; }
+.month-title .y b { font-family: var(--num); font-weight: 600; font-size: 22px; line-height: 1; }
+.month-title .y span { color: var(--muted); font-size: 13px; }
+
+.nav { display: flex; gap: 6px; align-items: center; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+}
+.icon-btn:hover { border-color: var(--muted); }
+.icon-btn svg { width: 20px; height: 20px; }
+.btn {
+  height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--line); white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn.danger.solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.small { height: 32px; padding: 0 10px; font-size: 13px; border-radius: 8px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ---------- 日曆 ---------- */
+.calendar {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.weekdays, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.weekdays div {
+  padding: 10px 12px; font-size: 13px; color: var(--muted); font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+.weekdays .we { color: var(--weekend); }
+.grid { user-select: none; -webkit-user-select: none; }
+.cell {
+  --c: transparent;
+  position: relative;
+  min-height: 112px;
+  padding: 8px 10px 10px;
+  text-align: left;
+  display: flex; flex-direction: column; gap: 4px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--c) 14%, var(--surface));
+  touch-action: manipulation;
+}
+.cell:nth-child(7n) { border-right: 0; }
+.cell.last-row { border-bottom: 0; }
+.cell.has { box-shadow: inset 4px 0 0 var(--c); }
+.cell:hover { background: color-mix(in srgb, var(--c) 22%, var(--surface-2)); }
+.cell.out { background: var(--surface-2); }
+.cell.out > * { opacity: .45; }
+.cell .d { display: flex; align-items: center; gap: 6px; }
+.cell .d b { font-family: var(--num); font-weight: 600; font-size: 22px; line-height: 1; }
+.cell.we .d b { color: var(--weekend); }
+.cell.today .d b {
+  background: var(--ink); color: var(--surface); border-radius: 6px; padding: 2px 6px 1px; margin-left: -6px;
+}
+.cell .note-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin-left: auto; }
+.cell .tag { font-size: var(--tag-size); font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell .sub { font-size: calc(var(--tag-size) * .88); color: var(--muted); font-family: var(--num); font-weight: 500; letter-spacing: .02em; white-space: nowrap; }
+.cell .ot {
+  align-self: flex-start;
+  font-family: var(--num); font-weight: 700; font-size: calc(var(--tag-size) * .9);
+  color: var(--ot); border: 1.5px solid var(--ot); border-radius: 5px; padding: 0 5px; line-height: 1.35;
+}
+/* 24 小時時間軸：一眼看出班別落在一天的哪一段 */
+.bar { margin-top: auto; position: relative; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.bar i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--seg, var(--c)); }
+.bar i.carry { opacity: .4; }
+.bar::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: color-mix(in srgb, var(--ink) 18%, transparent); }
+
+.legend-line { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 12px; padding: 0 4px; }
+
+/* 套用模式 */
+.paint-banner {
+  display: none; align-items: center; gap: 10px; margin-bottom: 10px;
+  padding: 8px 8px 8px 14px; border-radius: 12px; background: var(--ink); color: var(--surface); font-size: 14px;
+}
+.paint-banner.on { display: flex; }
+.paint-banner .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.paint-banner .btn { margin-left: auto; background: transparent; color: inherit; border-color: color-mix(in srgb, var(--surface) 40%, transparent); height: 32px; }
+.painting .cell { cursor: crosshair; }
+
+/* ---------- 側欄 ---------- */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
+.panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.panel h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.kpi span { display: block; font-size: 12px; color: var(--muted); }
+.kpi b { font-family: var(--num); font-size: 28px; font-weight: 600; line-height: 1.1; }
+.kpi b small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.kpi.ot b { color: var(--ot); }
+.off-row { margin-top: 12px; display: flex; align-items: center; gap: 10px; }
+.off-row .label { font-size: 13px; color: var(--muted); }
+.off-row .val { font-family: var(--num); font-size: 22px; font-weight: 600; margin-left: auto; }
+.off-row .val.over { color: var(--danger); }
+.off-row .val.full { color: var(--ok); }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.stepper button { width: 30px; height: 30px; font-size: 18px; line-height: 1; color: var(--muted); }
+.stepper button:hover { background: var(--surface-2); color: var(--ink); }
+.stepper input { width: 36px; height: 30px; text-align: center; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); background: transparent; font-family: var(--num); font-size: 16px; -moz-appearance: textfield; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.balances { display: flex; flex-direction: column; gap: 12px; }
+.bal-top { display: flex; align-items: baseline; gap: 8px; font-size: 14px; }
+.bal-top .sw { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.bal-top .r { margin-left: auto; font-family: var(--num); font-size: 17px; font-weight: 600; }
+.bal-top .r.neg { color: var(--danger); }
+.bal-meter { height: 6px; border-radius: 3px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
+.bal-meter i { display: block; height: 100%; border-radius: 3px; }
+.bal-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.empty-hint { font-size: 13px; color: var(--muted); }
+
+.brushes { display: flex; flex-wrap: wrap; gap: 6px; }
+.brush {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 500;
+}
+.brush .sw { width: 10px; height: 10px; border-radius: 3px; }
+.brush:hover { border-color: var(--muted); }
+.brush[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.brush-group + .brush-group { margin-top: 10px; }
+.brush-group > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.side-actions { display: flex; gap: 8px; }
+.side-actions .btn { flex: 1; }
+
+/* ---------- 對話框 ---------- */
+dialog {
+  border: 0; padding: 0; margin: auto; color: var(--ink); background: var(--surface);
+  border-radius: 18px; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  box-shadow: 0 24px 64px rgba(0,0,0,.28);
+}
+dialog::backdrop { background: rgba(10, 16, 24, .45); }
+dialog[open] { animation: pop .16s ease-out; display: flex; flex-direction: column; }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.dlg-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 12px; }
+.dlg-head h3 { font-size: 18px; font-weight: 700; }
+.dlg-head .sub { color: var(--muted); font-size: 14px; }
+.dlg-head .icon-btn { margin-left: auto; width: 36px; height: 36px; border: 0; background: transparent; }
+.dlg-body { padding: 4px 20px 16px; overflow-y: auto; flex: 1; }
+.dlg-foot { display: flex; gap: 8px; padding: 12px 20px 18px; border-top: 1px solid var(--line); }
+.dlg-foot .spacer { flex: 1; }
+dialog.wide { width: min(720px, calc(100vw - 32px)); }
+
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg button { height: 34px; border-radius: 8px; font-weight: 500; color: var(--muted); }
+.seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+.field { margin-top: 16px; }
+.field > label, .field > .label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.input {
+  width: 100%; height: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.input.bad { border-color: var(--danger); }
+.input.time { font-family: var(--num); font-size: 18px; letter-spacing: .04em; text-align: center; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > .grow { flex: 1; min-width: 0; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.warn { font-size: 13px; color: var(--danger); margin-top: 8px; }
+.color-in { width: 40px; height: 40px; padding: 3px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); flex: none; cursor: pointer; }
+.color-in::-webkit-color-swatch-wrapper { padding: 0; }
+.color-in::-webkit-color-swatch { border: 0; border-radius: 7px; }
+.color-in::-moz-color-swatch { border: 0; border-radius: 7px; }
+
+.choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.choice {
+  --c: var(--accent);
+  text-align: left; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface);
+  display: flex; flex-direction: column; gap: 2px; position: relative;
+}
+.choice::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
+.choice b { font-size: 15px; }
+.choice span { font-size: 12px; color: var(--muted); font-family: var(--num); letter-spacing: .02em; }
+.choice span.neg { color: var(--danger); }
+.choice:hover { border-color: var(--muted); }
+.choice[aria-checked="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 10%, var(--surface)); }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); font-size: 14px; }
+.chip[aria-checked="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+.preview-bar { margin-top: 10px; }
+.preview-bar .bar { height: 10px; border-radius: 5px; }
+.preview-bar .bar i { border-radius: 5px; }
+.preview-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 6px; }
+.preview-meta b { color: var(--ink); font-family: var(--num); font-size: 15px; }
+.preview-meta b.ot { color: var(--ot); }
+
+/* 設定 */
+.tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.tabs button { padding: 10px 12px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item { display: grid; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.item.shift { grid-template-columns: 40px minmax(0, 1fr) 76px 76px auto; }
+.item.leave { grid-template-columns: 40px minmax(0, 1fr) 70px 70px auto; }
+.item .input { height: 40px; background: var(--surface); }
+.item .input.time { font-size: 16px; padding: 0 4px; }
+.item .meta { grid-column: 2 / -1; font-size: 12px; color: var(--muted); margin-top: -4px; }
+.item .lock { font-size: 12px; color: var(--muted); padding: 0 6px; }
+.list-head { display: grid; gap: 8px; padding: 0 10px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.list-head.shift { grid-template-columns: 40px minmax(0, 1fr) 76px 76px 52px; }
+.list-head.leave { grid-template-columns: 40px minmax(0, 1fr) 70px 70px 52px; }
+.year-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.data-actions .btn { height: 48px; }
+.section-title { font-size: 14px; font-weight: 700; margin: 20px 0 10px; }
+.section-title:first-child { margin-top: 8px; }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 12px; z-index: 50;
+  background: var(--ink); color: var(--surface); padding: 10px 10px 10px 16px; border-radius: 12px;
+  font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); transition: .18s ease; max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast.warn { background: var(--danger); color: #fff; }
+.toast button { color: inherit; font-weight: 700; padding: 4px 8px; border-radius: 6px; text-decoration: underline; text-underline-offset: 3px; }
+.toast button:empty { display: none; }
+
+/* ---------- 響應式 ---------- */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 1fr; grid-template-areas: "top" "cal" "side"; }
+  .side { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+}
+@media (max-width: 720px) {
+  .app { padding: 12px 12px 32px; gap: 12px; }
+  .side { display: flex; align-items: stretch; }
+  .month-title .m { font-size: 56px; }
+  .topbar { gap: 8px; }
+  .month-title { flex-basis: 100%; }
+  .nav { flex: 1; }
+  .nav .btn { flex: 1; }
+  #settingsBtn { width: 40px; padding: 0; }
+  .topbar .btn .lbl { display: none; }
+  .cell { min-height: 74px; padding: 5px 5px 6px; gap: 2px; }
+  .cell .d b { font-size: 17px; }
+  .cell.today .d b { margin-left: -3px; padding: 1px 4px 0; }
+  .cell .sub { display: none; }
+  .cell .tag { font-size: calc(var(--tag-size) * .88); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .cell .ot { font-size: 11px; padding: 0 3px; }
+  .cell.has { box-shadow: inset 3px 0 0 var(--c); }
+  .weekdays div { padding: 8px 6px; text-align: center; }
+  .calendar { border-radius: 12px; }
+  .legend-line { display: none; }
+  dialog { width: 100vw; max-width: 100vw; max-height: 92vh; margin: auto 0 0; border-radius: 18px 18px 0 0; }
+  dialog.wide { width: 100vw; }
+  @keyframes pop { from { transform: translateY(40px); opacity: .6; } }
+  .dlg-foot { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+  .item.shift, .item.leave { grid-template-columns: 40px minmax(0, 1fr) 64px 64px; }
+  .item.shift > .btn, .item.leave > .btn, .item.leave > .lock { grid-column: 2 / -1; justify-self: end; }
+  .list-head { display: none; }
+  .data-actions { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media print {
+  body { background: #fff; }
+  .side, .nav, .paint-banner, .topbar .btn, .toast { display: none !important; }
+  .app { display: block; padding: 0; }
+  .calendar { box-shadow: none; }
+  .cell { min-height: 90px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="month-title" aria-live="polite">
+      <span class="m" id="mNum">12</span>
+      <span class="y"><b id="yNum">2025</b><span id="mSub">月班表</span></span>
+    </div>
+    <div class="nav">
+      <button class="icon-btn" id="prevBtn" aria-label="上個月" title="上個月 (←)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <button class="btn" id="todayBtn">今天</button>
+      <button class="icon-btn" id="nextBtn" aria-label="下個月" title="下個月 (→)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+    <button class="icon-btn" id="undoBtn" aria-label="復原" title="復原 (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+    </button>
+    <button class="btn" id="settingsBtn" title="班別、假別與資料">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      <span class="lbl">設定</span>
+    </button>
+  </header>
+
+  <main class="calendar-wrap">
+    <div class="paint-banner" id="paintBanner" role="status">
+      <span class="sw" id="paintSw"></span>
+      <span id="paintText"></span>
+      <button class="btn small" id="paintStop">完成</button>
+    </div>
+    <div class="calendar" id="calendar">
+      <div class="weekdays" id="weekdays"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="legend-line"><span>點日期編輯，或從右側選班別後連續點選／拖曳快速排班</span><span>時間軸 0 → 24 時</span></div>
+  </main>
+
+  <aside class="side">
+    <section class="panel">
+      <h2>本月 <small id="monthLabel"></small></h2>
+      <div class="kpis">
+        <div class="kpi"><span>上班</span><b id="kDays">0<small>天</small></b></div>
+        <div class="kpi"><span>總工時</span><b id="kHours">0<small>h</small></b></div>
+        <div class="kpi ot"><span>加班</span><b id="kOt">0<small>h</small></b></div>
+        <div class="kpi"><span>請假</span><b id="kLeave">0<small>h</small></b></div>
+      </div>
+      <div class="off-row">
+        <span class="label">輪休額度</span>
+        <span class="stepper">
+          <button id="offMinus" aria-label="減少輪休額度">−</button>
+          <input id="offQuota" type="number" min="0" max="31" inputmode="numeric" aria-label="本月輪休額度">
+          <button id="offPlus" aria-label="增加輪休額度">+</button>
+        </span>
+        <span class="val" id="offVal" title="已排 / 額度">0/0</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>快速排班</h2>
+      <div id="brushes"></div>
+    </section>
+
+    <section class="panel">
+      <h2>假別餘額 <small id="balYear"></small></h2>
+      <div class="balances" id="balances"></div>
+    </section>
+  </aside>
+</div>
+
+<!-- 單日編輯 -->
+<dialog id="dayDlg" aria-labelledby="dayTitle">
+  <form method="dialog" id="dayForm" novalidate>
+    <div class="dlg-head">
+      <div><h3 id="dayTitle"></h3><div class="sub" id="daySub"></div></div>
+      <button type="button" class="icon-btn" data-close aria-label="關閉">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="dlg-body">
+      <div class="seg" role="tablist" id="dayModeSeg">
+        <button type="button" role="tab" data-mode="work">上班</button>
+        <button type="button" role="tab" data-mode="leave">休假</button>
+      </div>
+
+      <div id="workPane">
+        <div class="field">
+          <span class="label">班別</span>
+          <div class="choices" id="shiftChoices" role="radiogroup" aria-label="班別"></div>
+        </div>
+        <div class="field" id="customFields">
+          <span class="label">自訂時間（可直接輸入 0900、900 或 9）</span>
+          <div class="row">
+            <input class="input time grow" id="cStart" inputmode="numeric" placeholder="0900" aria-label="上班時間">
+            <span>至</span>
+            <input class="input time grow" id="cEnd" inputmode="numeric" placeholder="1800" aria-label="下班時間">
+            <input type="color" class="color-in" id="cColor" value="#2a9d8f" aria-label="顏色">
+          </div>
+        </div>
+        <div class="preview-bar">
+          <div class="bar" id="pvBar"></div>
+          <div class="preview-meta"><span>工時 <b id="pvHours">0</b> h</span><span>加班 <b class="ot" id="pvOt">0</b> h</span></div>
+        </div>
+        <div class="field">
+          <label for="otManual">加班時數（留空自動計算：工時減基本工時）</label>
+          <input class="input" id="otManual" type="number" min="0" step="0.5" inputmode="decimal" placeholder="自動">
+        </div>
+      </div>
+
+      <div id="leavePane" hidden>
+        <div class="field">
+          <span class="label">假別</span>
+          <div class="choices" id="leaveChoices" role="radiogroup" aria-label="假別"></div>
+        </div>
+        <div class="field">
+          <span class="label">時數</span>
+          <div class="row">
+            <div class="chips" id="hourChips" role="radiogroup" aria-label="請假時數">
+              <button type="button" class="chip" data-h="8">全天 8h</button>
+              <button type="button" class="chip" data-h="4">半天 4h</button>
+            </div>
+            <input class="input grow" id="leaveHours" type="number" min="0.5" max="24" step="0.5" inputmode="decimal" aria-label="自訂時數" placeholder="自訂">
+          </div>
+          <div class="warn" id="leaveWarn" hidden></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="dayNote">備註</label>
+        <input class="input" id="dayNote" maxlength="80" placeholder="例如：支援二樓、換班給小王">
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn danger" id="dayClear">清除這天</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>取消</button>
+      <button type="submit" class="btn primary" id="daySave">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 設定 -->
+<dialog id="setDlg" class="wide" aria-labelledby="setTitle">
+  <div class="dlg-head">
+    <h3 id="setTitle">設定</h3>
+    <button type="button" class="icon-btn" data-close aria-label="關閉">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="tabs" role="tablist" id="setTabs">
+    <button role="tab" data-tab="shifts">班別</button>
+    <button role="tab" data-tab="leaves">假別與額度</button>
+    <button role="tab" data-tab="general">一般</button>
+    <button role="tab" data-tab="data">資料</button>
+  </div>
+  <div class="dlg-body" id="setBody"></div>
+  <div class="dlg-foot"><span class="spacer"></span><button class="btn primary" data-close>完成</button></div>
+</dialog>
+
+<!-- 確認 -->
+<dialog id="confirmDlg" aria-labelledby="cfTitle">
+  <div class="dlg-head"><h3 id="cfTitle"></h3></div>
+  <div class="dlg-body"><p id="cfMsg" style="white-space:pre-line"></p></div>
+  <div class="dlg-foot"><span class="spacer"></span><button class="btn" id="cfNo">取消</button><button class="btn primary" id="cfYes">確定</button></div>
+</dialog>
+
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastAct"></button></div>
+
+<script>
+'use strict';
+/* =========================================================
+   資料層：沿用舊版 localStorage 'db' 結構，舊資料可直接讀取
+   schedule[YYYY-MM-DD] =
+     { type:'work', shiftId, overtime, otManual?, customShift?, snapshot?, note? }
+     { type:'leave', leaveType, amount(小時), note? }
+   ========================================================= */
+const STORE_KEY = 'db';
+const DAY_HOURS = 8;                 // 假別 1 天 = 8 小時（與舊版相同）
+const BUILTIN = ['annual', 'personal', 'compensatory', 'public', 'off'];
+const DEFAULT_LEAVES = {
+  annual:       { name: '年假', color: '#3b82f6', unit: 'hour', yearlyQuota: {} },
+  personal:     { name: '事假', color: '#ef4444', unit: 'hour', yearlyQuota: {} },
+  compensatory: { name: '補休', color: '#8b5cf6', unit: 'hour', yearlyQuota: {} },
+  public:       { name: '公假', color: '#f59e0b', unit: 'hour', yearlyQuota: {}, noQuota: true },
+  off:          { name: '輪休', color: '#64a8e8', unit: 'hour', yearlyQuota: {}, noQuota: true }
+};
+const DEFAULT_SHIFTS = [
+  { id: '1', name: '早班', startTime: '07:00', endTime: '19:00', color: '#16a34a' },
+  { id: '2', name: '晚班', startTime: '19:00', endTime: '07:00', color: '#2563eb' }
+];
+
+let db;
+const view = { y: 0, m: 0 };         // m: 0-11
+let brush = null;                     // { kind:'shift'|'leave'|'clear', id }
+const undoStack = [];
+
+function blankDb() {
+  return {
+    version: 2,
+    shifts: [],
+    schedule: {},
+    config: { leaveTypes: {}, basicWorkHours: 8, monthlyOffQuota: {}, tagFontSize: 0.85, weekStart: 0, theme: 'auto' }
+  };
+}
+
+function normalize(raw) {
+  const out = blankDb();
+  if (!raw || typeof raw !== 'object') return out;
+  out.shifts = Array.isArray(raw.shifts) ? raw.shifts.filter(s => s && s.id && s.startTime && s.endTime).map(s => ({
+    id: String(s.id), name: String(s.name || '未命名'), startTime: s.startTime, endTime: s.endTime, color: s.color || '#16a34a'
+  })) : [];
+  out.schedule = {};
+  if (raw.schedule && typeof raw.schedule === 'object') {
+    for (const [k, v] of Object.entries(raw.schedule)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v && (v.type === 'work' || v.type === 'leave')) out.schedule[k] = v;
+    }
+  }
+  const c = raw.config || {};
+  out.config.basicWorkHours = +c.basicWorkHours > 0 ? +c.basicWorkHours : 8;
+  out.config.tagFontSize = +c.tagFontSize > 0 ? +c.tagFontSize : 0.85;
+  out.config.monthlyOffQuota = c.monthlyOffQuota && typeof c.monthlyOffQuota === 'object' ? c.monthlyOffQuota : {};
+  out.config.weekStart = c.weekStart === 1 ? 1 : 0;
+  out.config.theme = ['light', 'dark'].includes(c.theme) ? c.theme : 'auto';
+  const lt = c.leaveTypes && typeof c.leaveTypes === 'object' ? c.leaveTypes : {};
+  for (const [id, def] of Object.entries(DEFAULT_LEAVES)) {
+    out.config.leaveTypes[id] = { ...structuredClone(def), ...(lt[id] || {}) };
+    if (def.noQuota) out.config.leaveTypes[id].noQuota = true;
+  }
+  for (const [id, v] of Object.entries(lt)) {
+    if (!out.config.leaveTypes[id] && v && v.name) out.config.leaveTypes[id] = { unit: 'hour', yearlyQuota: {}, ...v };
+  }
+  for (const v of Object.values(out.config.leaveTypes)) if (!v.yearlyQuota || typeof v.yearlyQuota !== 'object') v.yearlyQuota = {};
+  return out;
+}
+
+function load() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { raw = null; }
+  db = normalize(raw);
+  if (!raw) db.shifts = structuredClone(DEFAULT_SHIFTS);
+  let d = new Date();
+  try {
+    const saved = localStorage.getItem('currentDate');
+    if (saved && !isNaN(new Date(saved))) d = new Date(saved);
+  } catch (e) { /* 無法存取儲存空間時用今天 */ }
+  view.y = d.getFullYear(); view.m = d.getMonth();
+}
+
+function save() {
+  // 同時寫入 overtime 欄位，維持與舊版的相容
+  for (const e of Object.values(db.schedule)) if (e.type === 'work') e.overtime = otOf(e);
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    localStorage.setItem('currentDate', new Date(view.y, view.m, 1, 12).toISOString());
+  } catch (e) {
+    toast('無法儲存：瀏覽器儲存空間已滿或被封鎖。請先匯出備份。', { warn: true });
+  }
+}
+
+/* ---------- 日期與時間工具（全部用本地時間，避免 UTC 位移） ---------- */
+const pad = n => String(n).padStart(2, '0');
+const keyOf = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const monthKey = (y, m) => `${y}-${pad(m + 1)}`;
+const parseKey = k => { const [y, m, d] = k.split('-').map(Number); return { y, m: m - 1, d }; };
+const shiftKey = (k, delta) => { const { y, m, d } = parseKey(k); const t = new Date(y, m, d + delta); return keyOf(t.getFullYear(), t.getMonth(), t.getDate()); };
+const WD = ['日', '一', '二', '三', '四', '五', '六'];
+const todayKey = () => { const t = new Date(); return keyOf(t.getFullYear(), t.getMonth(), t.getDate()); };
+
+function parseTime(str) {
+  const s = String(str || '').trim();
+  if (!s) return null;
+  let h, mi;
+  const m = s.match(/^(\d{1,2})[:：.](\d{2})$/);
+  if (m) { h = +m[1]; mi = +m[2]; }
+  else {
+    const d = s.replace(/\D/g, '');
+    if (d.length !== s.length || !d.length || d.length > 4) return null;
+    if (d.length <= 2) { h = +d; mi = 0; }
+    else if (d.length === 3) { h = +d[0]; mi = +d.slice(1); }
+    else { h = +d.slice(0, 2); mi = +d.slice(2); }
+  }
+  if (h > 23 || mi > 59) return null;
+  return `${pad(h)}:${pad(mi)}`;
+}
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+function spanHours(s, e) {
+  let d = toMin(e) - toMin(s);
+  if (d <= 0) d += 1440;             // 跨日班（含 24 小時班）
+  return d / 60;
+}
+const r1 = n => Math.round(n * 10) / 10;
+const fmtNum = n => (Number.isInteger(r1(n)) ? String(r1(n)) : r1(n).toFixed(1));
+function fmtDH(h) {
+  const neg = h < 0; h = Math.abs(r1(h));
+  const d = Math.floor(h / DAY_HOURS), rest = r1(h - d * DAY_HOURS);
+  let s = d && rest ? `${d}天${fmtNum(rest)}時` : d ? `${d}天` : `${fmtNum(rest)}時`;
+  return (neg ? '−' : '') + s;
+}
+
+/* ---------- 計算 ---------- */
+const leaveTypes = () => db.config.leaveTypes;
+const shiftById = id => db.shifts.find(s => s.id === id);
+
+function shiftInfo(e) {
+  if (e.shiftId === 'custom' && e.customShift) {
+    return { name: e.customShift.name || '彈性', startTime: e.customShift.startTime, endTime: e.customShift.endTime, color: e.customShift.color || '#2a9d8f' };
+  }
+  const s = shiftById(e.shiftId);
+  if (s) return s;
+  if (e.snapshot) return e.snapshot;
+  return { name: '已刪除班別', startTime: null, endTime: null, color: '#94a3b8' };
+}
+function hoursOf(e) {
+  if (e.type !== 'work') return 0;
+  const s = shiftInfo(e);
+  return s.startTime && s.endTime ? spanHours(s.startTime, s.endTime) : 0;
+}
+function otOf(e) {
+  if (e.type !== 'work') return 0;
+  if (e.otManual != null && e.otManual !== '') return +e.otManual || 0;
+  const s = shiftInfo(e);
+  if (!s.startTime) return +e.overtime || 0;
+  return Math.max(0, hoursOf(e) - (db.config.basicWorkHours || 8));
+}
+function leaveUsed(id, year, exceptKey) {
+  let used = 0;
+  for (const [k, e] of Object.entries(db.schedule)) {
+    if (k === exceptKey || e.type !== 'leave' || e.leaveType !== id) continue;
+    if (k.startsWith(`${year}-`)) used += +e.amount || 0;
+  }
+  return used;
+}
+function offUsed(y, m, exceptKey) {  // 單位：天（8 小時 = 1 天，半天 = 0.5）
+  const pre = monthKey(y, m) + '-';
+  let used = 0;
+  for (const [k, e] of Object.entries(db.schedule)) {
+    if (k === exceptKey || !k.startsWith(pre)) continue;
+    if (e.type === 'leave' && e.leaveType === 'off') used += (+e.amount || DAY_HOURS) / DAY_HOURS;
+  }
+  return used;
+}
+const offQuota = (y, m) => +db.config.monthlyOffQuota[monthKey(y, m)] || 0;
+
+/* 新增/變更某天後是否會超出額度，回傳提示文字或 null */
+function quotaWarning(k, entry) {
+  if (!entry || entry.type !== 'leave') return null;
+  const lt = leaveTypes()[entry.leaveType];
+  if (!lt) return null;
+  const { y, m } = parseKey(k);
+  if (entry.leaveType === 'off') {
+    const q = offQuota(y, m);
+    const after = offUsed(y, m, k) + entry.amount / DAY_HOURS;
+    if (after > q) return `本月輪休將排到 ${fmtNum(after)} 天，超過額度 ${q} 天`;
+    return null;
+  }
+  if (lt.noQuota) return null;
+  const q = +lt.yearlyQuota[y] || 0;
+  const after = leaveUsed(entry.leaveType, y, k) + entry.amount;
+  if (!q) return `${lt.name}尚未設定 ${y} 年額度`;
+  if (after > q) return `${lt.name}將超出 ${y} 年額度 ${fmtDH(after - q)}`;
+  return null;
+}
+
+/* ---------- 復原 ---------- */
+function snapshot() {
+  undoStack.push(JSON.stringify(db.schedule));
+  if (undoStack.length > 50) undoStack.shift();
+  $('#undoBtn').disabled = false;
+}
+function undo() {
+  if (!undoStack.length) return;
+  db.schedule = JSON.parse(undoStack.pop());
+  $('#undoBtn').disabled = !undoStack.length;
+  save(); render();
+  toast('已復原');
+}
+
+/* =========================================================
+   畫面
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'style') n.style.cssText = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else if (k === 'text') n.textContent = v;
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c);
+  return n;
+};
+
+function applyTheme() {
+  const t = db.config.theme;
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.style.setProperty('--tag-size', db.config.tagFontSize + 'rem');
+}
+
+function render() {
+  renderHeader();
+  renderCalendar();
+  renderSummary();
+  renderBrushes();
+  renderBalances();
+}
+
+function renderHeader() {
+  $('#mNum').textContent = view.m + 1;
+  $('#yNum').textContent = view.y;
+  $('#monthLabel').textContent = `${view.y} 年 ${view.m + 1} 月`;
+  document.title = `${view.y}年${view.m + 1}月 排班表`;
+}
+
+function segStyle(start, end) {
+  return `left:${(start / 1440 * 100).toFixed(2)}%;width:${((end - start) / 1440 * 100).toFixed(2)}%`;
+}
+function barSegments(k, e) {
+  const segs = [];
+  // 前一天跨日班延續到今天的部分
+  const prev = db.schedule[shiftKey(k, -1)];
+  if (prev && prev.type === 'work') {
+    const s = shiftInfo(prev);
+    if (s.startTime && toMin(s.endTime) <= toMin(s.startTime) && toMin(s.endTime) > 0) {
+      segs.push(el('i', { class: 'carry', style: segStyle(0, toMin(s.endTime)) + `;--seg:${s.color}` }));
+    }
+  }
+  if (e && e.type === 'work') {
+    const s = shiftInfo(e);
+    if (s.startTime) {
+      const a = toMin(s.startTime), b = toMin(s.endTime);
+      segs.push(el('i', { style: segStyle(a, b > a ? b : 1440) }));
+    }
+  } else if (e && e.type === 'leave') {
+    const hrs = Math.min(+e.amount || DAY_HOURS, 24);
+    segs.push(el('i', { style: segStyle(0, hrs >= DAY_HOURS ? 1440 : hrs / 24 * 1440) + ';opacity:.55' }));
+  }
+  return segs;
+}
+
+function renderCalendar() {
+  const ws = db.config.weekStart;
+  const wd = $('#weekdays');
+  wd.replaceChildren(...Array.from({ length: 7 }, (_, i) => {
+    const d = (i + ws) % 7;
+    return el('div', { class: d === 0 || d === 6 ? 'we' : '', text: WD[d] });
+  }));
+
+  const first = new Date(view.y, view.m, 1);
+  const lead = (first.getDay() - ws + 7) % 7;
+  const days = new Date(view.y, view.m + 1, 0).getDate();
+  const total = Math.ceil((lead + days) / 7) * 7;
+  const tk = todayKey();
+  const cells = [];
+  for (let i = 0; i < total; i++) {
+    const dt = new Date(view.y, view.m, 1 - lead + i);
+    const k = keyOf(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const e = db.schedule[k];
+    const dow = dt.getDay();
+    const cls = ['cell'];
+    if (dt.getMonth() !== view.m) cls.push('out');
+    if (k === tk) cls.push('today');
+    if (dow === 0 || dow === 6) cls.push('we');
+    if (i >= total - 7) cls.push('last-row');
+
+    let color = null, tag = null, sub = null, ot = 0, label = `${dt.getMonth() + 1}月${dt.getDate()}日 星期${WD[dow]}`;
+    if (e && e.type === 'work') {
+      const s = shiftInfo(e);
+      color = s.color; tag = s.name;
+      sub = s.startTime ? `${s.startTime}–${s.endTime}` : '';
+      ot = otOf(e);
+      label += `，${s.name}${sub ? ' ' + sub : ''}${ot ? `，加班 ${fmtNum(ot)} 小時` : ''}`;
+    } else if (e && e.type === 'leave') {
+      const lt = leaveTypes()[e.leaveType];
+      color = lt ? lt.color : '#94a3b8';
+      tag = lt ? lt.name : '已刪除假別';
+      const amt = +e.amount || DAY_HOURS;
+      sub = amt === DAY_HOURS ? '全天' : `${fmtNum(amt)} 小時`;
+      label += `，${tag} ${sub}`;
+    }
+    if (e && e.note) label += `，備註：${e.note}`;
+    if (e) cls.push('has');
+
+    const cell = el('button', {
+      class: cls.join(' '), type: 'button', 'data-key': k, 'aria-label': label,
+      style: color ? `--c:${color}` : null, title: e && e.note ? e.note : null
+    },
+      el('span', { class: 'd' }, el('b', { text: dt.getDate() }), e && e.note ? el('span', { class: 'note-dot' }) : null),
+      tag ? el('span', { class: 'tag', text: tag }) : null,
+      sub ? el('span', { class: 'sub', text: sub }) : null,
+      ot > 0 ? el('span', { class: 'ot', text: `+${fmtNum(ot)}h` }) : null,
+      el('span', { class: 'bar' }, barSegments(k, e))
+    );
+    cells.push(cell);
+  }
+  $('#grid').replaceChildren(...cells);
+}
+
+function renderSummary() {
+  const pre = monthKey(view.y, view.m) + '-';
+  let days = 0, hours = 0, ot = 0, leave = 0;
+  for (const [k, e] of Object.entries(db.schedule)) {
+    if (!k.startsWith(pre)) continue;
+    if (e.type === 'work') { days++; hours += hoursOf(e); ot += otOf(e); }
+    else if (e.type === 'leave' && e.leaveType !== 'off') leave += +e.amount || 0;
+  }
+  const put = (id, v, unit) => { $(id).replaceChildren(fmtNum(v), el('small', { text: unit })); };
+  put('#kDays', days, '天'); put('#kHours', hours, 'h'); put('#kOt', ot, 'h'); put('#kLeave', leave, 'h');
+
+  const q = offQuota(view.y, view.m), used = offUsed(view.y, view.m);
+  if (document.activeElement !== $('#offQuota')) $('#offQuota').value = q;
+  const v = $('#offVal');
+  v.textContent = `${fmtNum(used)}/${q}`;
+  v.className = 'val' + (used > q ? ' over' : q && used === q ? ' full' : '');
+  v.title = used > q ? `已超出 ${fmtNum(used - q)} 天` : `已排 ${fmtNum(used)} 天，還可排 ${fmtNum(q - used)} 天`;
+}
+
+function renderBrushes() {
+  const mk = (kind, id, name, color) => el('button', {
+    class: 'brush', type: 'button', 'aria-pressed': String(!!brush && brush.kind === kind && brush.id === id),
+    onclick: () => setBrush(brush && brush.kind === kind && brush.id === id ? null : { kind, id })
+  }, color ? el('span', { class: 'sw', style: `background:${color}` }) : null, name);
+
+  const shiftBtns = db.shifts.map(s => mk('shift', s.id, s.name, s.color));
+  const leaveBtns = Object.entries(leaveTypes()).map(([id, lt]) => mk('leave', id, lt.name, lt.color));
+  $('#brushes').replaceChildren(
+    el('div', { class: 'brush-group' }, el('span', { text: '班別' }),
+      el('div', { class: 'brushes' }, shiftBtns.length ? shiftBtns : el('span', { class: 'empty-hint', text: '還沒有班別，到設定新增' }))),
+    el('div', { class: 'brush-group' }, el('span', { text: '休假（全天）' }), el('div', { class: 'brushes' }, leaveBtns)),
+    el('div', { class: 'brush-group' }, el('div', { class: 'brushes' }, mk('clear', 'clear', '清除', null)))
+  );
+}
+
+function renderBalances() {
+  $('#balYear').textContent = `${view.y} 年`;
+  const items = [];
+  for (const [id, lt] of Object.entries(leaveTypes())) {
+    if (lt.noQuota || id === 'off') continue;
+    const q = +lt.yearlyQuota[view.y] || 0;
+    const used = leaveUsed(id, view.y);
+    if (!q && !used) continue;
+    const rem = q - used;
+    const pct = q ? Math.min(100, used / q * 100) : 100;
+    items.push(el('div', {},
+      el('div', { class: 'bal-top' },
+        el('span', { class: 'sw', style: `background:${lt.color}` }),
+        el('span', { text: lt.name }),
+        el('span', { class: 'r' + (rem < 0 ? ' neg' : ''), text: q ? `剩 ${fmtDH(rem)}` : '未設額度' })),
+      el('div', { class: 'bal-meter' }, el('i', { style: `width:${pct}%;background:${rem < 0 ? 'var(--danger)' : lt.color}` })),
+      el('div', { class: 'bal-sub', text: q ? `已用 ${fmtDH(used)}，共 ${fmtDH(q)}` : `已用 ${fmtDH(used)}` })
+    ));
+  }
+  $('#balances').replaceChildren(...(items.length ? items : [
+    el('p', { class: 'empty-hint' }, '還沒設定年度額度。', el('button', { class: 'btn small', style: 'margin-top:8px', onclick: () => openSettings('leaves') }, '設定假別額度'))
+  ]));
+}
+
+/* ---------- 快速排班（刷子） ---------- */
+function setBrush(b) {
+  brush = b;
+  const banner = $('#paintBanner');
+  document.body.classList.toggle('painting', !!b);
+  banner.classList.toggle('on', !!b);
+  if (b) {
+    let name, color;
+    if (b.kind === 'shift') { const s = shiftById(b.id); name = s.name; color = s.color; }
+    else if (b.kind === 'leave') { const lt = leaveTypes()[b.id]; name = lt.name; color = lt.color; }
+    else { name = '清除'; color = 'transparent'; }
+    $('#paintSw').style.background = color;
+    $('#paintText').textContent = b.kind === 'clear'
+      ? '點選或拖曳日期以清除排班，按 Esc 結束'
+      : `正在套用「${name}」，點選或拖曳日期即可排入，按 Esc 結束`;
+  }
+  renderBrushes();
+}
+
+function brushEntry(k) {
+  if (!brush || brush.kind === 'clear') return null;
+  const old = db.schedule[k];
+  const note = old && old.note ? { note: old.note } : {};
+  if (brush.kind === 'shift') return { type: 'work', shiftId: brush.id, ...note };
+  return { type: 'leave', leaveType: brush.id, amount: DAY_HOURS, ...note };
+}
+
+let stroke = null;   // { touched:Set, warns:[] }
+function paintCell(k) {
+  if (!stroke || stroke.touched.has(k)) return;
+  stroke.touched.add(k);
+  const entry = brushEntry(k);
+  if (entry) {
+    const w = quotaWarning(k, entry);
+    if (w) stroke.warns.push(w);
+    db.schedule[k] = entry;
+  } else delete db.schedule[k];
+  renderCalendar();
+}
+
+function setupGrid() {
+  const grid = $('#grid');
+  grid.addEventListener('click', e => {
+    const c = e.target.closest('.cell');
+    if (!c || brush) return;
+    openDay(c.dataset.key);
+  });
+  grid.addEventListener('keydown', e => {
+    if (!brush || (e.key !== 'Enter' && e.key !== ' ')) return;
+    const c = e.target.closest('.cell'); if (!c) return;
+    e.preventDefault();
+    snapshot(); stroke = { touched: new Set(), warns: [] };
+    paintCell(c.dataset.key); endStroke();
+  });
+  grid.addEventListener('pointerdown', e => {
+    if (!brush || e.button > 0) return;
+    const c = e.target.closest('.cell'); if (!c) return;
+    e.preventDefault();
+    snapshot();
+    stroke = { touched: new Set(), warns: [] };
+    paintCell(c.dataset.key);
+  });
+  window.addEventListener('pointermove', e => {
+    if (!stroke) return;
+    const c = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.cell');
+    if (c) paintCell(c.dataset.key);
+  });
+  window.addEventListener('pointerup', endStroke);
+  window.addEventListener('pointercancel', endStroke);
+  // 拖曳時避免手機捲動
+  grid.addEventListener('touchmove', e => { if (stroke) e.preventDefault(); }, { passive: false });
+}
+function endStroke() {
+  if (!stroke) return;
+  const s = stroke; stroke = null;
+  save(); render();
+  if (s.warns.length) toast(s.warns[s.warns.length - 1], { warn: true, action: '復原', onAction: undo });
+}
+
+/* ---------- 單日編輯 ---------- */
+let draft = null;
+
+function openDay(k) {
+  const e = db.schedule[k];
+  const { y, m, d } = parseKey(k);
+  const dow = new Date(y, m, d).getDay();
+  $('#dayTitle').textContent = `${m + 1} 月 ${d} 日`;
+  $('#daySub').textContent = `${y} 年，星期${WD[dow]}`;
+  const lastShift = db.shifts[0] ? db.shifts[0].id : 'custom';
+  draft = {
+    key: k,
+    mode: e && e.type === 'leave' ? 'leave' : 'work',
+    shiftId: e && e.type === 'work' ? (e.shiftId === 'custom' || shiftById(e.shiftId) ? e.shiftId : 'custom') : lastShift,
+    custom: { startTime: '', endTime: '', color: '#2a9d8f' },
+    leaveType: e && e.type === 'leave' && leaveTypes()[e.leaveType] ? e.leaveType : 'annual',
+    hours: e && e.type === 'leave' ? (+e.amount || DAY_HOURS) : DAY_HOURS
+  };
+  if (e && e.type === 'work' && (e.shiftId === 'custom' || !shiftById(e.shiftId))) {
+    const s = shiftInfo(e);
+    draft.custom = { startTime: s.startTime || '', endTime: s.endTime || '', color: s.color };
+  }
+  $('#cStart').value = draft.custom.startTime.replace(':', '');
+  $('#cEnd').value = draft.custom.endTime.replace(':', '');
+  $('#cColor').value = toHex(draft.custom.color);
+  $('#otManual').value = e && e.type === 'work' && e.otManual != null && e.otManual !== '' ? e.otManual : '';
+  $('#dayNote').value = e && e.note ? e.note : '';
+  $('#leaveHours').value = [4, 8].includes(draft.hours) ? '' : draft.hours;
+  $('#dayClear').disabled = !e;
+  renderDay();
+  $('#dayDlg').showModal();
+}
+
+function toHex(c) {
+  if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+  if (/^#[0-9a-f]{3}$/i.test(c)) return '#' + [...c.slice(1)].map(x => x + x).join('');
+  return '#2a9d8f';
+}
+
+function renderDay() {
+  for (const b of $('#dayModeSeg').children) b.setAttribute('aria-selected', String(b.dataset.mode === draft.mode));
+  $('#workPane').hidden = draft.mode !== 'work';
+  $('#leavePane').hidden = draft.mode !== 'leave';
+
+  const basic = db.config.basicWorkHours || 8;
+  const sc = db.shifts.map(s => {
+    const h = spanHours(s.startTime, s.endTime);
+    return el('button', {
+      type: 'button', class: 'choice', role: 'radio', 'aria-checked': String(draft.shiftId === s.id), style: `--c:${s.color}`,
+      onclick: () => { draft.shiftId = s.id; renderDay(); }
+    }, el('b', { text: s.name }), el('span', { text: `${s.startTime}–${s.endTime}  ${fmtNum(h)}h` }));
+  });
+  sc.push(el('button', {
+    type: 'button', class: 'choice', role: 'radio', 'aria-checked': String(draft.shiftId === 'custom'), style: `--c:${draft.custom.color}`,
+    onclick: () => { draft.shiftId = 'custom'; renderDay(); setTimeout(() => $('#cStart').focus(), 0); }
+  }, el('b', { text: '彈性時間' }), el('span', { text: '自己輸入上下班時間' })));
+  $('#shiftChoices').replaceChildren(...sc);
+  $('#customFields').hidden = draft.shiftId !== 'custom';
+
+  // 工時預覽
+  let st = null, en = null, color = draft.custom.color;
+  if (draft.shiftId === 'custom') { st = parseTime($('#cStart').value); en = parseTime($('#cEnd').value); }
+  else { const s = shiftById(draft.shiftId); if (s) { st = s.startTime; en = s.endTime; color = s.color; } }
+  const pv = $('#pvBar');
+  pv.style.setProperty('--c', color);
+  if (st && en) {
+    const a = toMin(st), b = toMin(en);
+    pv.replaceChildren(...[b > a ? el('i', { style: segStyle(a, b) }) : el('i', { style: segStyle(a, 1440) }),
+      b <= a && b > 0 ? el('i', { style: segStyle(0, b) + ';opacity:.4' }) : null].filter(Boolean));
+    const h = spanHours(st, en);
+    $('#pvHours').textContent = fmtNum(h);
+    const man = $('#otManual').value;
+    $('#pvOt').textContent = fmtNum(man !== '' ? +man : Math.max(0, h - basic));
+  } else {
+    pv.replaceChildren();
+    $('#pvHours').textContent = '–'; $('#pvOt').textContent = '–';
+  }
+
+  // 假別
+  const { y, m } = parseKey(draft.key);
+  const lc = Object.entries(leaveTypes()).map(([id, lt]) => {
+    let info, neg = false;
+    if (id === 'off') {
+      const q = offQuota(y, m), u = offUsed(y, m, draft.key);
+      info = q ? `本月剩 ${fmtNum(q - u)} 天` : '本月未設額度'; neg = q && q - u <= 0;
+    } else if (lt.noQuota) info = '不計額度';
+    else {
+      const q = +lt.yearlyQuota[y] || 0, u = leaveUsed(id, y, draft.key);
+      info = q ? `剩 ${fmtDH(q - u)}` : '未設額度'; neg = q && q - u <= 0;
+    }
+    return el('button', {
+      type: 'button', class: 'choice', role: 'radio', 'aria-checked': String(draft.leaveType === id), style: `--c:${lt.color}`,
+      onclick: () => { draft.leaveType = id; renderDay(); }
+    }, el('b', { text: lt.name }), el('span', { class: neg ? 'neg' : '', text: info }));
+  });
+  $('#leaveChoices').replaceChildren(...lc);
+  for (const c of $('#hourChips').children) c.setAttribute('aria-checked', String(+c.dataset.h === draft.hours && $('#leaveHours').value === ''));
+  const w = draft.mode === 'leave' ? quotaWarning(draft.key, { type: 'leave', leaveType: draft.leaveType, amount: draft.hours }) : null;
+  $('#leaveWarn').hidden = !w;
+  $('#leaveWarn').textContent = w ? w + '，仍可儲存。' : '';
+}
+
+function saveDay(ev) {
+  ev.preventDefault();
+  const k = draft.key;
+  const note = $('#dayNote').value.trim();
+  let entry;
+  if (draft.mode === 'work') {
+    if (draft.shiftId === 'custom') {
+      const st = parseTime($('#cStart').value), en = parseTime($('#cEnd').value);
+      $('#cStart').classList.toggle('bad', !st);
+      $('#cEnd').classList.toggle('bad', !en);
+      if (!st || !en) { (st ? $('#cEnd') : $('#cStart')).focus(); toast('請輸入有效時間，例如 0900', { warn: true }); return; }
+      entry = { type: 'work', shiftId: 'custom', customShift: { startTime: st, endTime: en, color: $('#cColor').value } };
+    } else {
+      if (!shiftById(draft.shiftId)) { toast('請先選一個班別', { warn: true }); return; }
+      entry = { type: 'work', shiftId: draft.shiftId };
+    }
+    const man = $('#otManual').value.trim();
+    if (man !== '') {
+      if (isNaN(+man) || +man < 0) { $('#otManual').classList.add('bad'); return; }
+      entry.otManual = +man;
+    }
+  } else {
+    const h = draft.hours;
+    if (!(h > 0 && h <= 24)) { $('#leaveHours').classList.add('bad'); $('#leaveHours').focus(); return; }
+    entry = { type: 'leave', leaveType: draft.leaveType, amount: h };
+  }
+  if (note) entry.note = note;
+  snapshot();
+  db.schedule[k] = entry;
+  save(); render();
+  $('#dayDlg').close();
+  const w = quotaWarning(k, entry);
+  if (w) toast(w, { warn: true, action: '復原', onAction: undo });
+}
+
+function setupDay() {
+  $('#dayForm').addEventListener('submit', saveDay);
+  $('#dayModeSeg').addEventListener('click', e => {
+    const b = e.target.closest('[data-mode]'); if (!b) return;
+    draft.mode = b.dataset.mode; renderDay();
+  });
+  for (const id of ['#cStart', '#cEnd']) {
+    $(id).addEventListener('input', () => { $(id).classList.remove('bad'); renderDay(); });
+    $(id).addEventListener('blur', () => { const t = parseTime($(id).value); if (t) $(id).value = t.replace(':', ''); });
+  }
+  $('#cColor').addEventListener('input', e => { draft.custom.color = e.target.value; renderDay(); });
+  $('#otManual').addEventListener('input', () => { $('#otManual').classList.remove('bad'); renderDay(); });
+  $('#hourChips').addEventListener('click', e => {
+    const c = e.target.closest('[data-h]'); if (!c) return;
+    draft.hours = +c.dataset.h; $('#leaveHours').value = ''; $('#leaveHours').classList.remove('bad'); renderDay();
+  });
+  $('#leaveHours').addEventListener('input', e => {
+    e.target.classList.remove('bad');
+    draft.hours = e.target.value === '' ? DAY_HOURS : +e.target.value; renderDay();
+  });
+  $('#dayClear').addEventListener('click', () => {
+    if (!db.schedule[draft.key]) return;
+    snapshot();
+    delete db.schedule[draft.key];
+    save(); render();
+    $('#dayDlg').close();
+    toast('已清除這天', { action: '復原', onAction: undo });
+  });
+}
+
+/* ---------- 設定 ---------- */
+let setTab = 'shifts';
+let quotaYear = 0;
+
+function openSettings(tab) {
+  setTab = tab || setTab;
+  quotaYear = view.y;
+  renderSettings();
+  if (!$('#setDlg').open) $('#setDlg').showModal();
+}
+
+function renderSettings() {
+  for (const b of $('#setTabs').children) b.setAttribute('aria-selected', String(b.dataset.tab === setTab));
+  const body = $('#setBody');
+  body.replaceChildren(...({ shifts: settingsShifts, leaves: settingsLeaves, general: settingsGeneral, data: settingsData })[setTab]());
+}
+
+function commit() { save(); render(); }
+
+function timeInput(value, onOk, label) {
+  const inp = el('input', { class: 'input time', inputmode: 'numeric', value: value.replace(':', ''), 'aria-label': label });
+  inp.addEventListener('change', () => {
+    const t = parseTime(inp.value);
+    if (!t) { inp.classList.add('bad'); toast('時間格式不對，請輸入如 0700', { warn: true }); return; }
+    inp.classList.remove('bad'); inp.value = t.replace(':', ''); onOk(t);
+  });
+  return inp;
+}
+
+function settingsShifts() {
+  const rows = db.shifts.map(s => {
+    const used = Object.values(db.schedule).filter(e => e.type === 'work' && e.shiftId === s.id).length;
+    const meta = el('div', { class: 'meta', text: `${fmtNum(spanHours(s.startTime, s.endTime))} 小時，已排 ${used} 天` });
+    const updMeta = () => { meta.textContent = `${fmtNum(spanHours(s.startTime, s.endTime))} 小時，已排 ${used} 天`; };
+    return el('div', { class: 'item shift' },
+      el('input', { type: 'color', class: 'color-in', value: toHex(s.color), 'aria-label': `${s.name}顏色`, oninput: e => { s.color = e.target.value; commit(); } }),
+      el('input', { class: 'input', value: s.name, maxlength: 12, 'aria-label': '班別名稱', onchange: e => { const v = e.target.value.trim(); if (v) { s.name = v; commit(); } else e.target.value = s.name; } }),
+      timeInput(s.startTime, t => { s.startTime = t; updMeta(); commit(); }, '上班時間'),
+      timeInput(s.endTime, t => { s.endTime = t; updMeta(); commit(); }, '下班時間'),
+      el('button', { class: 'btn small danger', onclick: () => deleteShift(s, used) }, '刪除'),
+      meta
+    );
+  });
+  return [
+    el('div', { class: 'list-head shift' }, el('span', { text: '顏色' }), el('span', { text: '名稱' }), el('span', { text: '上班' }), el('span', { text: '下班' }), el('span')),
+    el('div', { class: 'list' }, rows.length ? rows : el('p', { class: 'empty-hint', text: '還沒有班別，按下方按鈕新增第一個。' })),
+    el('div', { style: 'margin-top:12px' }, el('button', { class: 'btn', onclick: () => {
+      db.shifts.push({ id: 's' + Date.now().toString(36), name: `班別${db.shifts.length + 1}`, startTime: '09:00', endTime: '18:00', color: '#0d9488' });
+      commit(); renderSettings();
+      const inputs = $('#setBody').querySelectorAll('.item.shift .input:not(.time)');
+      inputs[inputs.length - 1]?.select();
+    } }, '＋ 新增班別')),
+    el('p', { class: 'hint', text: '修改時間會即時套用到所有已排的日子，加班時數會自動重算。跨夜班（如 1900 至 0700）會自動判斷。' })
+  ];
+}
+
+async function deleteShift(s, used) {
+  const ok = await confirmBox(`刪除「${s.name}」？`, used
+    ? `已排的 ${used} 天會保留下來，改成彈性時間 ${s.startTime}–${s.endTime}。`
+    : '這個班別還沒排過任何一天。', '刪除');
+  if (!ok) return;
+  snapshot();
+  for (const e of Object.values(db.schedule)) {
+    if (e.type === 'work' && e.shiftId === s.id) {
+      e.shiftId = 'custom';
+      e.customShift = { name: s.name, startTime: s.startTime, endTime: s.endTime, color: s.color };
+    }
+  }
+  db.shifts = db.shifts.filter(x => x !== s);
+  if (brush && brush.id === s.id) setBrush(null);
+  commit(); renderSettings();
+}
+
+function settingsLeaves() {
+  const yIn = el('input', { class: 'input', type: 'number', min: 2000, max: 2100, value: quotaYear, style: 'width:110px', 'aria-label': '額度年份',
+    onchange: e => { const v = +e.target.value; if (v >= 2000 && v <= 2100) { quotaYear = v; renderSettings(); } } });
+  const rows = Object.entries(leaveTypes()).map(([id, lt]) => {
+    const builtin = BUILTIN.includes(id);
+    const total = +lt.yearlyQuota[quotaYear] || 0;
+    const setQ = (dd, hh) => { lt.yearlyQuota[quotaYear] = Math.max(0, dd) * DAY_HOURS + Math.max(0, hh); commit(); };
+    const dIn = el('input', { class: 'input', type: 'number', min: 0, step: 1, value: Math.floor(total / DAY_HOURS), 'aria-label': `${lt.name}天數` });
+    const hIn = el('input', { class: 'input', type: 'number', min: 0, max: 7.5, step: 0.5, value: r1(total % DAY_HOURS), 'aria-label': `${lt.name}小時` });
+    const onQ = () => setQ(+dIn.value || 0, +hIn.value || 0);
+    dIn.addEventListener('change', onQ); hIn.addEventListener('change', onQ);
+    const noQ = !!lt.noQuota || id === 'off';
+    const used = Object.values(db.schedule).filter(e => e.type === 'leave' && e.leaveType === id).length;
+    return el('div', { class: 'item leave' },
+      el('input', { type: 'color', class: 'color-in', value: toHex(lt.color), 'aria-label': `${lt.name}顏色`, oninput: e => { lt.color = e.target.value; commit(); } }),
+      el('input', { class: 'input', value: lt.name, maxlength: 10, 'aria-label': '假別名稱', onchange: e => { const v = e.target.value.trim(); if (v) { lt.name = v; commit(); } else e.target.value = lt.name; } }),
+      noQ ? el('span', { class: 'hint', style: 'grid-column: span 2; margin:0', text: id === 'off' ? '輪休依月份設定額度' : '不計額度' }) : dIn,
+      noQ ? null : hIn,
+      builtin ? el('span', { class: 'lock', text: '內建' }) : el('button', { class: 'btn small danger', onclick: () => deleteLeave(id, lt, used) }, '刪除')
+    );
+  });
+  const nameIn = el('input', { class: 'input grow', placeholder: '新假別名稱，例如：病假、婚假', maxlength: 10, 'aria-label': '新假別名稱' });
+  const colorIn = el('input', { type: 'color', class: 'color-in', value: '#14b8a6', 'aria-label': '新假別顏色' });
+  const quotaChk = el('input', { type: 'checkbox', checked: true });
+  const add = () => {
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.focus(); return; }
+    if (Object.values(leaveTypes()).some(l => l.name === name)) { toast(`已經有「${name}」了`, { warn: true }); return; }
+    leaveTypes()['custom_' + Date.now()] = { name, color: colorIn.value, unit: 'hour', yearlyQuota: {}, ...(quotaChk.checked ? {} : { noQuota: true }) };
+    commit(); renderSettings();
+  };
+  nameIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  return [
+    el('div', { class: 'year-row' }, el('span', { text: '額度年份' }), yIn, el('span', { class: 'hint', style: 'margin:0', text: '1 天 = 8 小時' })),
+    el('div', { class: 'list-head leave' }, el('span', { text: '顏色' }), el('span', { text: '名稱' }), el('span', { text: '天' }), el('span', { text: '小時' }), el('span')),
+    el('div', { class: 'list' }, rows),
+    el('h4', { class: 'section-title', text: '新增假別' }),
+    el('div', { class: 'row' }, colorIn, nameIn, el('button', { class: 'btn primary', onclick: add }, '新增')),
+    el('label', { class: 'check', style: 'margin-top:10px' }, quotaChk, '計入年度額度')
+  ];
+}
+
+async function deleteLeave(id, lt, used) {
+  const ok = await confirmBox(`刪除「${lt.name}」？`, used ? `已排的 ${used} 天${lt.name}也會一併清除，可以用復原找回。` : '這個假別還沒使用過。', '刪除');
+  if (!ok) return;
+  snapshot();
+  for (const [k, e] of Object.entries(db.schedule)) if (e.type === 'leave' && e.leaveType === id) delete db.schedule[k];
+  delete leaveTypes()[id];
+  if (brush && brush.id === id) setBrush(null);
+  commit(); renderSettings();
+}
+
+function settingsGeneral() {
+  const c = db.config;
+  const seg = (opts, cur, on) => el('div', { class: 'seg', role: 'tablist' }, opts.map(([v, label]) =>
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(cur === v), onclick: () => { on(v); commit(); renderSettings(); } }, label)));
+  return [
+    el('div', { class: 'field' },
+      el('label', { for: 'basicH', text: '每日基本工時（超過即算加班）' }),
+      el('input', { class: 'input', id: 'basicH', type: 'number', min: 1, max: 24, step: 0.5, value: c.basicWorkHours, style: 'width:120px',
+        onchange: e => { const v = +e.target.value; if (v > 0 && v <= 24) { c.basicWorkHours = v; commit(); } else e.target.value = c.basicWorkHours; } })),
+    el('div', { class: 'field' }, el('span', { class: 'label', text: '一週從哪天開始' }),
+      seg([[0, '星期日'], [1, '星期一']], c.weekStart, v => { c.weekStart = v; })),
+    el('div', { class: 'field' }, el('span', { class: 'label', text: '外觀' }),
+      seg([['auto', '跟隨系統'], ['light', '淺色'], ['dark', '深色']], c.theme, v => { c.theme = v; applyTheme(); })),
+    el('div', { class: 'field' }, el('span', { class: 'label', text: '日曆文字大小' }),
+      seg([[0.75, '小'], [0.85, '中'], [1, '大']], c.tagFontSize, v => { c.tagFontSize = v; applyTheme(); }))
+  ];
+}
+
+function settingsData() {
+  const n = Object.keys(db.schedule).length;
+  return [
+    el('p', { class: 'hint', style: 'margin:4px 0 14px;font-size:14px', text: `資料只存在這台裝置的瀏覽器裡（目前 ${n} 天有排班）。換手機或清除瀏覽器資料前，請先匯出備份。` }),
+    el('div', { class: 'data-actions' },
+      el('button', { class: 'btn primary', onclick: exportJson }, '匯出備份檔（JSON）'),
+      el('button', { class: 'btn', onclick: () => $('#fileIn').click() }, '從備份檔還原'),
+      el('button', { class: 'btn', onclick: exportCsv }, `匯出 ${view.m + 1} 月班表（CSV）`),
+      el('button', { class: 'btn', onclick: () => { $('#setDlg').close(); setTimeout(() => window.print(), 50); } }, '列印本月班表')),
+    el('h4', { class: 'section-title', text: '危險操作' }),
+    el('button', { class: 'btn danger', onclick: async () => {
+      if (!await confirmBox('清除本月所有排班？', `${view.y} 年 ${view.m + 1} 月的排班與請假都會刪除，可以用復原找回。`, '清除本月')) return;
+      snapshot();
+      const pre = monthKey(view.y, view.m) + '-';
+      for (const k of Object.keys(db.schedule)) if (k.startsWith(pre)) delete db.schedule[k];
+      commit(); renderSettings(); toast('已清除本月排班', { action: '復原', onAction: undo });
+    } }, `清除 ${view.m + 1} 月排班`)
+  ];
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el('a', { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function exportJson() {
+  save();
+  const t = new Date();
+  download(`shift-backup_${t.getFullYear()}${pad(t.getMonth() + 1)}${pad(t.getDate())}.json`, JSON.stringify(db, null, 2), 'application/json');
+  toast('已匯出備份檔');
+}
+function exportCsv() {
+  const rows = [['日期', '星期', '類型', '名稱', '上班', '下班', '工時', '加班', '請假時數', '備註']];
+  const days = new Date(view.y, view.m + 1, 0).getDate();
+  for (let d = 1; d <= days; d++) {
+    const k = keyOf(view.y, view.m, d), e = db.schedule[k];
+    const row = [k, WD[new Date(view.y, view.m, d).getDay()]];
+    if (!e) row.push('', '', '', '', '', '', '', '');
+    else if (e.type === 'work') { const s = shiftInfo(e); row.push('上班', s.name, s.startTime || '', s.endTime || '', fmtNum(hoursOf(e)), fmtNum(otOf(e)), '', e.note || ''); }
+    else { const lt = leaveTypes()[e.leaveType]; row.push('休假', lt ? lt.name : e.leaveType, '', '', '', '', fmtNum(+e.amount || 0), e.note || ''); }
+    rows.push(row);
+  }
+  const csv = rows.map(r => r.map(v => /[",\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : v).join(',')).join('\r\n');
+  download(`shift-schedule_${view.y}${pad(view.m + 1)}.csv`, '﻿' + csv, 'text/csv');
+  toast('已匯出 CSV');
+}
+function setupImport() {
+  $('#fileIn').addEventListener('change', e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      let json;
+      try { json = JSON.parse(reader.result); } catch (err) { toast('這不是有效的備份檔（JSON 格式錯誤）', { warn: true }); return; }
+      if (!json || typeof json !== 'object' || !(json.schedule || json.shifts) || !json.config) {
+        toast('這個檔案不是排班備份檔', { warn: true }); return;
+      }
+      const next = normalize(json);
+      const n = Object.keys(next.schedule).length;
+      if (!await confirmBox('用備份檔取代目前資料？', `備份內有 ${next.shifts.length} 個班別、${n} 天排班。目前的資料會被覆蓋，建議先匯出一份備份。`, '還原')) return;
+      db = next;
+      undoStack.length = 0; $('#undoBtn').disabled = true;
+      setBrush(null);
+      save(); applyTheme(); render(); renderSettings();
+      toast('已從備份還原');
+    };
+    reader.readAsText(f);
+  });
+}
+
+/* ---------- 共用元件 ---------- */
+function confirmBox(title, msg, yesLabel = '確定') {
+  return new Promise(resolve => {
+    const d = $('#confirmDlg');
+    $('#cfTitle').textContent = title;
+    $('#cfMsg').textContent = msg;
+    const yes = $('#cfYes'), no = $('#cfNo');
+    yes.textContent = yesLabel;
+    yes.className = 'btn ' + (/刪除|清除|還原/.test(yesLabel) ? 'danger solid' : 'primary');
+    const done = v => { yes.onclick = no.onclick = d.oncancel = null; d.close(); resolve(v); };
+    yes.onclick = () => done(true);
+    no.onclick = () => done(false);
+    d.oncancel = ev => { ev.preventDefault(); done(false); };
+    d.showModal();
+    no.focus();
+  });
+}
+
+let toastTimer;
+function toast(msg, { warn = false, action = '', onAction = null } = {}) {
+  const t = $('#toast');
+  $('#toastMsg').textContent = msg;
+  const a = $('#toastAct');
+  a.textContent = action;
+  a.onclick = onAction ? () => { t.classList.remove('show'); onAction(); } : null;
+  t.classList.toggle('warn', warn);
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 6000 : 3000);
+}
+
+/* ---------- 啟動 ---------- */
+function go(delta) {
+  const d = new Date(view.y, view.m + delta, 1);
+  view.y = d.getFullYear(); view.m = d.getMonth();
+  save(); render();
+}
+
+function init() {
+  load();
+  applyTheme();
+  setupGrid();
+  setupDay();
+  setupImport();
+
+  $('#prevBtn').onclick = () => go(-1);
+  $('#nextBtn').onclick = () => go(1);
+  $('#todayBtn').onclick = () => { const t = new Date(); view.y = t.getFullYear(); view.m = t.getMonth(); save(); render(); };
+  $('#undoBtn').onclick = undo;
+  $('#settingsBtn').onclick = () => openSettings();
+  $('#paintStop').onclick = () => setBrush(null);
+  $('#setTabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { setTab = b.dataset.tab; renderSettings(); } });
+
+  const setOff = v => {
+    v = Math.max(0, Math.min(31, Math.round(+v || 0)));
+    db.config.monthlyOffQuota[monthKey(view.y, view.m)] = v;
+    $('#offQuota').value = v;
+    save(); renderSummary();
+  };
+  $('#offQuota').addEventListener('change', e => setOff(e.target.value));
+  $('#offMinus').onclick = () => setOff(offQuota(view.y, view.m) - 1);
+  $('#offPlus').onclick = () => setOff(offQuota(view.y, view.m) + 1);
+
+  document.querySelectorAll('dialog').forEach(d => {
+    d.addEventListener('click', e => {
+      if (e.target.closest('[data-close]')) { d.close(); return; }
+      if (e.target === d && d.id !== 'confirmDlg') {     // 點背景關閉
+        const r = d.getBoundingClientRect();
+        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+      }
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (document.querySelector('dialog[open]')) return;
+    const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); return; }
+    if (typing) return;
+    if (e.key === 'Escape' && brush) setBrush(null);
+    else if (e.key === 'ArrowLeft' && !e.target.closest('.cell')) go(-1);
+    else if (e.key === 'ArrowRight' && !e.target.closest('.cell')) go(1);
+    else if (e.key === 't' || e.key === 'T') $('#todayBtn').click();
+  });
+
+  // 在日曆格子間用方向鍵移動
+  $('#grid').addEventListener('keydown', e => {
+    const moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
+    if (!(e.key in moves)) return;
+    const cells = [...$('#grid').children];
+    const i = cells.indexOf(e.target.closest('.cell'));
+    const n = cells[i + moves[e.key]];
+    if (n) { e.preventDefault(); e.stopPropagation(); n.focus(); }
+  });
+
+  save();
+  render();
+}
+init();
+</script>
+</body>
+</html>
