@@ -460,9 +460,16 @@ function genSel(el){
 
 /* ============ 檢查就緒 ============ */
 function checkReady(){
-  /* Cashout 按鈕可以在遊戲中動態偵測，不強制要求預先設定 */
-  var ready=S.betInput&&S.betButton&&S.tiles;
+  /* 按鈕改用文字匹配，只需要 input 和 tiles 的選擇器 */
+  var ready=S.betInput&&S.tiles;
+  var hasBetBtn=!!findBtnByText(['投注','Bet','下注']);
+  if(!hasBetBtn)ready=false;
   document.getElementById('__sel_warn').style.display=ready?'none':'block';
+  if(!ready&&!hasBetBtn){
+    document.getElementById('__sel_warn').textContent='找不到「投注」按鈕，請確認在踩地雷頁面';
+  }else if(!ready){
+    document.getElementById('__sel_warn').textContent='請先到「選擇器」頁籤設定頁面元素';
+  }
   document.getElementById('__btn_start').disabled=!ready;
   document.getElementById('__btn_start').style.opacity=ready?'1':'0.4';
   return ready;
@@ -507,10 +514,55 @@ function getBalance(){
 function setBet(amount){
   var inp=document.querySelector(S.betInput);
   if(!inp)throw new Error('找不到下注輸入框');
+  /* 先清空再填入 — 相容 React 受控元件 */
   var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+  setter.call(inp,'');
+  inp.dispatchEvent(new Event('input',{bubbles:true}));
   setter.call(inp,amount.toFixed(8));
   inp.dispatchEvent(new Event('input',{bubbles:true}));
   inp.dispatchEvent(new Event('change',{bubbles:true}));
+}
+
+/* 按文字內容找按鈕 — 比 CSS 選擇器可靠得多 */
+function findBtnByText(keywords){
+  var btns=document.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){
+    var b=btns[i];
+    if(b.closest('#__mines_panel'))continue;
+    var txt=b.textContent.trim();
+    for(var k=0;k<keywords.length;k++){
+      if(txt===keywords[k]||txt.toLowerCase()===keywords[k].toLowerCase()){
+        return b;
+      }
+    }
+  }
+  /* 寬鬆搜尋 — includes */
+  for(var i=0;i<btns.length;i++){
+    var b=btns[i];
+    if(b.closest('#__mines_panel'))continue;
+    var txt=b.textContent.trim().toLowerCase();
+    for(var k=0;k<keywords.length;k++){
+      if(txt.includes(keywords[k].toLowerCase())){
+        return b;
+      }
+    }
+  }
+  return null;
+}
+
+function clickBetButton(){
+  /* 優先用精確文字匹配找「投注」按鈕 */
+  var btn=findBtnByText(['投注','Bet','下注','Start','Play']);
+  if(!btn)throw new Error('找不到投注按鈕（頁面上沒有「投注」按鈕，可能不在踩地雷頁面）');
+  /* 安全檢查：按鈕要夠大（排除小的 icon 按鈕如「+」） */
+  if(btn.offsetWidth<100){
+    addLog('警告：找到的按鈕太小('+btn.offsetWidth+'px)，可能不對','r');
+  }
+  btn.click();
+}
+
+function findCashoutButton(){
+  return findBtnByText(['提現','Cashout','Cash Out','取款','兌現','Pick up']);
 }
 
 function clickEl(sel,name){
@@ -525,6 +577,12 @@ function getOpenTiles(){
     var cls=t.className||'';
     return!/open|reveal|active|click|select|disab/i.test(cls)&&!t.disabled;
   });
+}
+
+/* 檢查是否還在踩地雷頁面 */
+function checkStillOnPage(){
+  var url=window.location.href.toLowerCase();
+  return url.includes('mine');
 }
 
 function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
@@ -548,17 +606,31 @@ async function run(){
   while(ST.running&&!ST.stop&&ST.rounds<C.maxRounds){
     ST.rounds++;
     try{
+      /* 安全檢查：是否還在踩地雷頁面 */
+      if(!checkStillOnPage()){
+        addLog('已離開踩地雷頁面，自動停止','l');
+        break;
+      }
+
       addLog('['+ST.rounds+'] 下注 '+ST.bet.toFixed(6),'a');
       setBet(ST.bet);
       await wait(400);
 
-      clickEl(S.betButton,'下注按鈕');
+      /* 用文字匹配找「投注」按鈕，不依賴 CSS 選擇器 */
+      clickBetButton();
+      addLog('  已點投注','a');
       await wait(C.delayAfterBet);
+
+      /* 再次檢查是否被導航走了 */
+      if(!checkStillOnPage()){
+        addLog('點擊後被導航離開，自動停止','l');
+        break;
+      }
 
       var busted=false;
       for(var p=0;p<C.picks;p++){
         var avail=getOpenTiles();
-        if(avail.length===0){addLog('沒有可點的格子','l');busted=true;break}
+        if(avail.length===0){addLog('  沒有可點的格子','l');busted=true;break}
         var pick=avail[Math.floor(Math.random()*avail.length)];
         pick.click();
         addLog('  開第'+(p+1)+'格','a');
@@ -568,24 +640,8 @@ async function run(){
       await wait(500);
 
       if(!busted){
-        /* 先用預設選擇器找，找不到就動態搜尋頁面上的 Cashout 按鈕 */
-        var coBtn=S.cashoutButton?document.querySelector(S.cashoutButton):null;
-        if(!coBtn){
-          var allBtns=document.querySelectorAll('button');
-          for(var bi=0;bi<allBtns.length;bi++){
-            var btxt=allBtns[bi].textContent.trim().toLowerCase();
-            if(btxt.includes('cashout')||btxt.includes('cash out')||
-               btxt.includes('提現')||btxt.includes('取款')||btxt.includes('兌現')){
-              coBtn=allBtns[bi];
-              if(!S.cashoutButton){
-                S.cashoutButton=genSel(coBtn);
-                addLog('動態找到 Cashout → '+S.cashoutButton,'a');
-                renderSelectors();
-              }
-              break;
-            }
-          }
-        }
+        /* 用文字匹配找 Cashout 按鈕 */
+        var coBtn=findCashoutButton();
         if(coBtn&&!coBtn.disabled){
           coBtn.click();
           ST.wins++;
