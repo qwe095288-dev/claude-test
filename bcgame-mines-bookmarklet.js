@@ -4,7 +4,7 @@ if(window.__MINES_BOT){window.__MINES_BOT.toggle();return}
 
 /* ============ 策略參數 ============ */
 var C={
-  baseBet:0.00001,
+  baseBet:3.1799,
   mines:4,
   picks:2,
   multiOnLoss:3,
