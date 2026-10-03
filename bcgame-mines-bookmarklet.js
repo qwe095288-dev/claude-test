@@ -104,7 +104,10 @@ panel.innerHTML=`
 
 <div class="mp-head" id="__mp_head">
   <b>踩地雷 Bot</b>
-  <button class="mp-close" id="__mp_close">&times;</button>
+  <div style="display:flex;gap:6px">
+    <button class="mp-close" id="__mp_mini" style="font-size:13px">—</button>
+    <button class="mp-close" id="__mp_close">&times;</button>
+  </div>
 </div>
 
 <div class="mp-tabs">
@@ -208,9 +211,23 @@ tabs.forEach(function(t,i){
   document.addEventListener('touchend',onEnd);
 })();
 
-/* ============ 關閉/顯示 ============ */
+/* ============ 關閉/縮小/顯示 ============ */
 document.getElementById('__mp_close').addEventListener('click',function(){
   panel.style.display='none';
+});
+var miniMode=false;
+document.getElementById('__mp_mini').addEventListener('click',function(e){
+  e.stopPropagation();
+  miniMode=!miniMode;
+  var tabs=panel.querySelector('.mp-tabs');
+  var body=panel.querySelector('.mp-body');
+  if(miniMode){
+    tabs.style.display='none';body.style.display='none';
+    panel.style.width='auto';panel.style.maxHeight='none';
+  }else{
+    tabs.style.display='flex';body.style.display='block';
+    panel.style.width='320px';panel.style.maxHeight='70vh';
+  }
 });
 window.__MINES_BOT={toggle:function(){
   panel.style.display=panel.style.display==='none'?'flex':'none';
@@ -528,24 +545,33 @@ async function setBet(amount){
     inp.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  /* 先 tap + focus 暖機，確保 React 知道 input 被互動了 */
-  tapElement(inp);
-  inp.focus();
-  await wait(150);
+  /* 如果 input 目前是 0 或空，先點預設金額按鈕讓框架自己改成非零值 */
+  var cur=parseFloat(inp.value)||0;
+  if(cur<0.01){
+    var presetBtn=findBtnByText(['10','100']);
+    if(presetBtn){
+      presetBtn.click();
+      await wait(200);
+      addLog('  先點預設按鈕暖機','a');
+    }
+  }
 
+  inp.focus();
+  await wait(100);
   doSet();
   await wait(100);
 
-  /* 驗證：如果值沒設成功，重試最多 3 次 */
+  /* 驗證 + 重試 */
   for(var retry=0;retry<3;retry++){
     var actual=parseFloat(inp.value)||0;
-    if(Math.abs(actual-amount)<0.01){
+    if(Math.abs(actual-amount)<0.5){
       addLog('  輸入框: '+inp.value,'a');
       return;
     }
     addLog('  設值重試('+(retry+1)+') 目標:'+val+' 實際:'+inp.value,'r');
+    tapElement(inp);
     inp.focus();
-    inp.setSelectionRange(0,inp.value.length);
+    await wait(150);
     doSet();
     await wait(200);
   }
