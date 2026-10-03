@@ -514,13 +514,16 @@ function getBalance(){
 function setBet(amount){
   var inp=document.querySelector(S.betInput);
   if(!inp)throw new Error('找不到下注輸入框');
-  /* 先清空再填入 — 相容 React 受控元件 */
+  var val=amount.toFixed(4);
+  inp.focus();
   var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-  setter.call(inp,'');
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
-  setter.call(inp,amount.toFixed(8));
+  /* 關鍵：清除 React 的 _valueTracker，否則 React 偵測不到值變更會重置回舊值 */
+  var tracker=inp._valueTracker;
+  if(tracker){tracker.setValue('')}
+  setter.call(inp,val);
   inp.dispatchEvent(new Event('input',{bubbles:true}));
   inp.dispatchEvent(new Event('change',{bubbles:true}));
+  addLog('  輸入框設為: '+val,'a');
 }
 
 /* 按文字內容找按鈕 — 比 CSS 選擇器可靠得多 */
