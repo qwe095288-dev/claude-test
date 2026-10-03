@@ -573,10 +573,57 @@ function clickEl(sel,name){
 
 function getOpenTiles(){
   var all=document.querySelectorAll(S.tiles);
-  return Array.from(all).filter(function(t){
-    var cls=t.className||'';
-    return!/open|reveal|active|click|select|disab/i.test(cls)&&!t.disabled;
+  addLog('  找到 '+all.length+' 個格子元素','a');
+
+  /* 第一輪不過濾，先看看全部格子的狀態 */
+  if(all.length===0)return[];
+
+  /* 只排除已翻開（有寶石/骷髏圖）的格子 */
+  var open=Array.from(all).filter(function(t){
+    var cls=(t.className||'').toLowerCase();
+    /* 只排除明確已翻開的：revealed, opened, disabled */
+    if(t.disabled||t.getAttribute('aria-disabled')==='true')return false;
+    if(/revealed|opened|bomb|mine|gem|diamond/i.test(cls))return false;
+    /* 檢查是否有子元素包含圖片（已翻開的格子通常有 img/svg） */
+    var hasImage=t.querySelector('img,svg');
+    if(hasImage)return false;
+    return true;
   });
+
+  addLog('  可點格子: '+open.length+' 個','a');
+
+  /* 如果過濾後是 0 但總數是 25，可能過濾邏輯不對，改用全部 */
+  if(open.length===0&&all.length===25){
+    addLog('  過濾後為 0，改用全部格子','r');
+    return Array.from(all);
+  }
+
+  return open;
+}
+
+/* 模擬觸控事件 — 手機 Safari 上 .click() 可能無效 */
+function tapElement(el){
+  var rect=el.getBoundingClientRect();
+  var x=rect.left+rect.width/2;
+  var y=rect.top+rect.height/2;
+  var touchObj=new Touch({
+    identifier:Date.now(),
+    target:el,
+    clientX:x,clientY:y,
+    pageX:x+window.scrollX,
+    pageY:y+window.scrollY
+  });
+  el.dispatchEvent(new TouchEvent('touchstart',{
+    bubbles:true,cancelable:true,touches:[touchObj],targetTouches:[touchObj],changedTouches:[touchObj]
+  }));
+  el.dispatchEvent(new TouchEvent('touchend',{
+    bubbles:true,cancelable:true,touches:[],targetTouches:[],changedTouches:[touchObj]
+  }));
+  /* 也觸發 click 作為備用 */
+  el.click();
+  /* 再試 pointer events */
+  el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:x,clientY:y}));
+  el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,clientX:x,clientY:y}));
 }
 
 /* 檢查是否還在踩地雷頁面 */
@@ -632,7 +679,8 @@ async function run(){
         var avail=getOpenTiles();
         if(avail.length===0){addLog('  沒有可點的格子','l');busted=true;break}
         var pick=avail[Math.floor(Math.random()*avail.length)];
-        pick.click();
+        /* 用觸控模擬點擊格子，相容手機 Safari */
+        tapElement(pick);
         addLog('  開第'+(p+1)+'格','a');
         await wait(C.delayClick);
       }
