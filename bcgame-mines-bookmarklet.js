@@ -633,173 +633,39 @@ async function setBet(amount){
   inp=getInp();
   if(!inp)throw new Error('等待後仍找不到下注輸入框');
 
+  /* 匯率換算會讓顯示值有微小誤差，用 0.1% 相對誤差 */
   function checkVal(){
     var actual=parseFloat(getInp().value)||0;
-    return Math.abs(actual-amount)<0.5;
+    return Math.abs(actual-amount)<=Math.max(0.0001,amount*0.001);
   }
 
-  /* 策略 A: React nativeInputValueSetter */
-  function reactSet(){
-    var i=getInp();
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    var tracker=i._valueTracker;
-    if(tracker)tracker.setValue('');
-    setter.call(i,val);
-    i.dispatchEvent(new Event('input',{bubbles:true}));
-    i.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-
-  /* 策略 B: 先清空再用 React setter + InputEvent */
-  function reactSetWithClear(){
-    var i=getInp();
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    /* 先設為空觸發一次 */
-    var tracker=i._valueTracker;
-    if(tracker)tracker.setValue(i.value||'x');
-    setter.call(i,'');
-    i.dispatchEvent(new InputEvent('input',{bubbles:true,data:null,inputType:'deleteContentBackward'}));
-    i.dispatchEvent(new Event('change',{bubbles:true}));
-    /* 再設為目標值 */
-    if(tracker)tracker.setValue('');
-    setter.call(i,val);
-    i.dispatchEvent(new InputEvent('input',{bubbles:true,data:val,inputType:'insertText'}));
-    i.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-
-  /* 策略 C: execCommand insertText */
+  /* BC Game 只認瀏覽器原生 (isTrusted) 輸入事件；只有 execCommand 能產生，
+     用 dispatchEvent 假造的事件會讓輸入框看起來對、但點投注不會開局 */
   async function execCmdSet(){
     var i=getInp();
     i.focus();
+    await wait(50);
     i.select();
-    await wait(30);
     document.execCommand('selectAll',false,null);
     document.execCommand('delete',false,null);
-    await wait(30);
+    await wait(50);
     document.execCommand('insertText',false,val);
   }
 
-  /* 策略 D: 逐字鍵盤模擬 */
-  async function keyboardSet(){
-    var i=getInp();
-    i.focus();
-    /* 全選刪除 */
-    i.select();
-    i.dispatchEvent(new KeyboardEvent('keydown',{key:'a',code:'KeyA',ctrlKey:true,bubbles:true}));
-    i.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',code:'Backspace',keyCode:8,bubbles:true}));
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    setter.call(i,'');
-    i.dispatchEvent(new InputEvent('input',{bubbles:true,data:null,inputType:'deleteContentBackward'}));
-    await wait(30);
-    /* 逐字輸入 */
-    for(var ci=0;ci<val.length;ci++){
-      var ch=val[ci];
-      i.dispatchEvent(new KeyboardEvent('keydown',{key:ch,bubbles:true}));
-      i.dispatchEvent(new KeyboardEvent('keypress',{key:ch,bubbles:true}));
-      var prev=i.value;
-      setter.call(i,prev+ch);
-      i.dispatchEvent(new InputEvent('input',{bubbles:true,data:ch,inputType:'insertText'}));
-      i.dispatchEvent(new KeyboardEvent('keyup',{key:ch,bubbles:true}));
-    }
-    i.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-
-  /* 策略 E: 透過 React fiber 直接呼叫 onChange */
-  function reactFiberSet(){
-    var i=getInp();
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    /* 找 __reactProps$ key，直接拿 onChange */
-    var propsKey=Object.keys(i).find(function(k){return k.startsWith('__reactProps$')});
-    if(propsKey&&i[propsKey]&&i[propsKey].onChange){
-      setter.call(i,val);
-      i[propsKey].onChange({target:i,currentTarget:i,type:'change'});
-      return true;
-    }
-    /* 備用：走 fiber tree 找 onChange */
-    var fiberKey=Object.keys(i).find(function(k){
-      return k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$');
-    });
-    if(!fiberKey)return false;
-    var node=i[fiberKey];
-    for(var d=0;d<15&&node;d++){
-      if(node.memoizedProps&&typeof node.memoizedProps.onChange==='function'){
-        setter.call(i,val);
-        node.memoizedProps.onChange({target:i,currentTarget:i,type:'change'});
-        return true;
-      }
-      node=node.return;
-    }
-    return false;
-  }
-
-  /* 策略 F: 模擬剪貼簿貼上 */
-  async function clipboardPaste(){
-    var i=getInp();
-    i.focus();
-    i.select();
-    await wait(30);
-    var dt=new DataTransfer();
-    dt.setData('text/plain',val);
-    i.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));
-    await wait(50);
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    if(parseFloat(i.value)!==amount){
-      setter.call(i,val);
-      i.dispatchEvent(new InputEvent('input',{bubbles:true,data:val,inputType:'insertFromPaste'}));
-      i.dispatchEvent(new Event('change',{bubbles:true}));
-    }
-  }
-
-  /* 策略 G: 點預設按鈕暖機 → 再 React fiber */
-  async function presetThenFiber(){
-    var presetBtn=findBtnByText(['10','100','1']);
-    if(presetBtn){
-      tapElement(presetBtn);
-      await wait(400);
-    }
-    if(!reactFiberSet()){
-      reactSetWithClear();
-    }
-  }
-
-  /* 依序嘗試各策略 */
-  var strategies=[
-    {name:'reactFiber',fn:async function(){tapElement(getInp());getInp().focus();await wait(150);if(!reactFiberSet())throw new Error('no fiber')}},
-    {name:'reactClear',fn:async function(){tapElement(getInp());getInp().focus();await wait(150);reactSetWithClear()}},
-    {name:'execCmd',fn:async function(){await execCmdSet()}},
-    {name:'paste',fn:async function(){await clipboardPaste()}},
-    {name:'keyboard',fn:async function(){await keyboardSet()}},
-    {name:'preset+fiber',fn:async function(){await presetThenFiber()}}
-  ];
-
-  for(var si=0;si<strategies.length;si++){
-    var s=strategies[si];
+  for(var attempt=1;attempt<=4;attempt++){
     try{
-      await s.fn();
-      await wait(150);
+      await execCmdSet();
+      await wait(250);
       if(checkVal()){
-        addLog('  輸入框: '+getInp().value+' ('+s.name+')','a');
+        addLog('  輸入框: '+getInp().value+(attempt>1?' (第'+attempt+'次成功)':''),'a');
         return;
       }
     }catch(e){}
-    addLog('  '+s.name+' 失敗, 實際:'+getInp().value,'r');
-    await wait(100);
+    addLog('  輸入失敗 第'+attempt+'次, 實際:'+getInp().value,'r');
+    getInp().blur();
+    await wait(300*attempt);
   }
-
-  /* 全部策略都失敗，最後一搏 */
-  for(var fi=0;fi<2;fi++){
-    await wait(500);
-    tapElement(getInp());
-    getInp().focus();
-    await wait(300);
-    try{reactFiberSet()}catch(e){}
-    await wait(100);
-    if(checkVal()){addLog('  輸入框: '+getInp().value+' (finalRetry-fiber)','a');return}
-    reactSetWithClear();
-    await wait(200);
-    if(checkVal()){addLog('  輸入框: '+getInp().value+' (finalRetry-clear)','a');return}
-  }
-
-  addLog('  輸入框最終: '+getInp().value+' (目標:'+val+') 全策略失敗','l');
+  throw new Error('無法設定下注金額 '+val+'，本局不下注');
 }
 
 /* 按文字內容找可點擊元素 — 搜尋所有元素類型 */
@@ -966,7 +832,7 @@ async function run(){
 
   ST.running=true;ST.stop=false;
   ST.bet=C.baseBet;ST.lossStreak=0;
-  ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;
+  ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.betFails=0;
   ST.initBal=getBalance();
 
   document.getElementById('__btn_start').style.display='none';
@@ -987,15 +853,7 @@ async function run(){
       await setBet(ST.bet);
       await wait(300);
 
-      /* 驗證下注金額 — 如果值被重設就再試一次 */
       var betInp=safeQuery(S.betInput);
-      var actualBet=betInp?parseFloat(betInp.value)||0:0;
-      if(Math.abs(actualBet-ST.bet)>=0.5){
-        addLog('  投注前驗證失敗('+actualBet+')，重試...','r');
-        await setBet(ST.bet);
-        await wait(200);
-      }
-
       clickBetButton();
       addLog('  已點投注 (金額:'+((betInp&&betInp.value)||'?')+')','a');
       await wait(C.delayAfterBet);
@@ -1004,6 +862,25 @@ async function run(){
         addLog('點擊後被導航離開，自動停止','l');
         break;
       }
+
+      /* 沒開局就不能算輸，否則會依假的連輸一路加注 */
+      var started=false;
+      for(var sw=0;sw<10&&!ST.stop;sw++){
+        if(findRandomBtn()||findCashoutButton()){started=true;break}
+        await wait(300);
+      }
+      if(!started){
+        ST.betFails=(ST.betFails||0)+1;
+        ST.rounds--;
+        addLog('  投注沒有生效（遊戲沒開局），不計輸贏，同金額重試 '+ST.betFails+'/3','r');
+        if(ST.betFails>=3){
+          addLog('連續 3 次投注沒生效，自動停止','l');
+          break;
+        }
+        await wait(1000);
+        continue;
+      }
+      ST.betFails=0;
 
       /* ===== 開格階段 ===== */
       var busted=false;
