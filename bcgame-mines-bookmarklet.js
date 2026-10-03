@@ -558,12 +558,8 @@ function genSel(el){
 /* ============ 檢查就緒 ============ */
 function checkReady(){
   var ready=S.betInput&&S.tiles;
-  var hasBetBtn=!!findBtnByText(['投注','Bet','下注']);
-  if(!hasBetBtn)ready=false;
   document.getElementById('__sel_warn').style.display=ready?'none':'block';
-  if(!ready&&!hasBetBtn){
-    document.getElementById('__sel_warn').textContent='找不到「投注」按鈕，請確認在踩地雷頁面';
-  }else if(!ready){
+  if(!ready){
     document.getElementById('__sel_warn').textContent='請先到「選擇器」頁籤設定頁面元素';
   }
   document.getElementById('__btn_start').disabled=!ready;
@@ -749,11 +745,11 @@ async function setBet(amount){
   addLog('  輸入框最終: '+getInp().value+' (目標:'+val+') 全策略失敗','l');
 }
 
-/* 按文字內容找可點擊元素 — 搜尋 button, a, div[role=button], span */
+/* 按文字內容找可點擊元素 — 搜尋所有元素類型 */
 function findBtnByText(keywords){
+  /* 第一輪：button, a, role=button — 精確匹配 */
   var selectors='button,a,[role="button"]';
   var els=document.querySelectorAll(selectors);
-  /* 精確匹配 */
   for(var i=0;i<els.length;i++){
     var b=els[i];
     if(b.closest('#__mines_panel')||b.closest('#__mines_fab'))continue;
@@ -764,13 +760,27 @@ function findBtnByText(keywords){
       }
     }
   }
-  /* 寬鬆 includes */
+  /* 第二輪：button, a, role=button — 寬鬆 includes */
   for(var i=0;i<els.length;i++){
     var b=els[i];
     if(b.closest('#__mines_panel')||b.closest('#__mines_fab'))continue;
     var txt=b.textContent.trim().toLowerCase();
     for(var k=0;k<keywords.length;k++){
       if(txt.includes(keywords[k].toLowerCase())){
+        return b;
+      }
+    }
+  }
+  /* 第三輪：搜尋所有可見的 div/span（BC Game 可能用 div 做按鈕） — 精確匹配 */
+  var allEls=document.querySelectorAll('div,span');
+  for(var i=0;i<allEls.length;i++){
+    var b=allEls[i];
+    if(b.closest('#__mines_panel')||b.closest('#__mines_fab'))continue;
+    if(!b.offsetParent&&b.offsetWidth===0)continue;
+    if(b.children.length>3)continue;
+    var txt=b.textContent.trim();
+    for(var k=0;k<keywords.length;k++){
+      if(txt===keywords[k]||txt.toLowerCase()===keywords[k].toLowerCase()){
         return b;
       }
     }
@@ -804,10 +814,22 @@ function findRandomBtn(){
 }
 
 function clickBetButton(){
+  /* 優先用文字匹配 */
   var btn=findBtnByText(['投注','Bet','下注','Start','Play']);
-  if(!btn)throw new Error('找不到投注按鈕（頁面上沒有「投注」按鈕，可能不在踩地雷頁面）');
-  if(btn.offsetWidth<100){
-    addLog('警告：找到的按鈕太小('+btn.offsetWidth+'px)，可能不對','r');
+  /* 備案：用自動偵測時存的選擇器 */
+  if(!btn&&S.betButton){
+    btn=document.querySelector(S.betButton);
+    if(btn)addLog('  用儲存的選擇器找到投注按鈕','a');
+  }
+  if(!btn){
+    addLog('找不到投注按鈕，嘗試列舉頁面按鈕...','r');
+    var allBtns=document.querySelectorAll('button');
+    allBtns.forEach(function(b){
+      if(b.closest('#__mines_panel'))return;
+      var txt=b.textContent.trim().substring(0,20);
+      if(txt)addLog('  btn: "'+txt+'" ('+b.offsetWidth+'x'+b.offsetHeight+')','r');
+    });
+    throw new Error('找不到投注按鈕');
   }
   tapElement(btn);
 }
@@ -876,8 +898,14 @@ function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
 
 /* ============ 策略主迴圈 ============ */
 async function run(){
-  if(ST.running)return;
-  if(!checkReady()){addLog('選擇器未設定完成','l');return}
+  if(ST.running){addLog('已在運行中','r');return}
+  if(!checkReady()){
+    addLog('選擇器未設定完成','l');
+    document.getElementById('__sel_warn').style.display='block';
+    document.getElementById('__sel_warn').textContent='缺少必要選擇器，請先到「選擇器」頁籤設定';
+    return;
+  }
+  addLog('checkReady 通過，準備啟動...','a');
 
   ST.running=true;ST.stop=false;
   ST.bet=C.baseBet;ST.lossStreak=0;
