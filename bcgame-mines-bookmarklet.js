@@ -135,6 +135,7 @@ panel.innerHTML=`
   <button class="mp-tab" data-tab="cfg">參數</button>
   <button class="mp-tab" data-tab="sel">選擇器</button>
   <button class="mp-tab" data-tab="log">紀錄</button>
+  <button class="mp-tab" data-tab="diag">診斷</button>
 </div>
 
 <div class="mp-body">
@@ -184,6 +185,17 @@ panel.innerHTML=`
   <div id="__tab_log" style="display:none">
     <div class="mp-log" id="__logbox"></div>
   </div>
+
+  <div id="__tab_diag" style="display:none">
+    <div style="font-size:11px;color:#8b8fa3;margin-bottom:8px;line-height:1.5">
+      1. 按「開始錄製」<br>2. 手動輸入金額 → 手動按投注 → 玩完一局<br>3. 按「Bot 填入金額」→ 手動按投注 → 玩完一局<br>4. 按「停止並產生報告」→「複製報告」
+    </div>
+    <button class="mp-btn mp-btn-pick" id="__diag_rec">開始錄製</button>
+    <button class="mp-btn mp-btn-sec" id="__diag_fill">Bot 填入金額（不下注）</button>
+    <button class="mp-btn mp-btn-sec" id="__diag_stop">停止並產生報告</button>
+    <textarea id="__diag_out" readonly style="width:100%;height:120px;background:#0c0e14;color:#8b8fa3;border:1px solid #2a2e3d;border-radius:6px;font-family:ui-monospace,monospace;font-size:10px;padding:6px;margin-bottom:6px"></textarea>
+    <button class="mp-btn mp-btn-go" id="__diag_copy">複製報告</button>
+  </div>
 </div>
 `;
 document.body.appendChild(panel);
@@ -218,7 +230,7 @@ fab.addEventListener('click',function(){
 
 /* ============ Tab 切換 ============ */
 var tabs=panel.querySelectorAll('.mp-tab');
-var tabIds=['ctrl','cfg','sel','log'];
+var tabIds=['ctrl','cfg','sel','log','diag'];
 tabs.forEach(function(t,i){
   t.addEventListener('click',function(){
     tabs.forEach(function(x){x.classList.remove('active')});
@@ -612,7 +624,22 @@ function getBalance(){
   return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||null;
 }
 
-/* ============ setBet — 多策略輸入值 ============ */
+/* 下注框附近 BC Game 顯示的「≈0.0999USD」換算提示 */
+function usdHint(inp){
+  var p=inp;
+  for(var u=0;u<6&&p;u++){
+    p=p.parentElement;
+    if(!p)break;
+    var els=p.querySelectorAll('div,span,p');
+    for(var i=0;i<els.length;i++){
+      var t=els[i].textContent.trim();
+      if(els[i].children.length===0&&t.charAt(0)==='≈'&&t.length<30)return t;
+    }
+  }
+  return '';
+}
+
+/* ============ setBet ============ */
 async function setBet(amount){
   var val=amount.toFixed(4);
 
@@ -655,9 +682,13 @@ async function setBet(amount){
   for(var attempt=1;attempt<=4;attempt++){
     try{
       await execCmdSet();
-      await wait(250);
+      await wait(150);
+      /* 真人點投注時輸入框會先失焦；合成的 click 不會移動焦點，所以手動失焦讓 BC Game 存入金額 */
+      getInp().blur();
+      await wait(350);
       if(checkVal()){
-        addLog('  輸入框: '+getInp().value+(attempt>1?' (第'+attempt+'次成功)':''),'a');
+        var hint=usdHint(getInp());
+        addLog('  輸入框: '+getInp().value+(hint?' ('+hint+')':'')+(attempt>1?' (第'+attempt+'次成功)':''),'a');
         return;
       }
     }catch(e){}
@@ -819,6 +850,94 @@ function checkStillOnPage(){
 
 function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
 
+/* ============ 診斷 ============ */
+var DG={rec:false,t0:0,events:[],poll:null,last:''};
+var DG_TYPES=['keydown','beforeinput','input','change','focus','blur','pointerdown','click'];
+
+function fnSrc(fn){try{return String(fn).replace(/\s+/g,' ').slice(0,300)}catch(e){return '?'}}
+function short(v){try{return(typeof v==='object'?JSON.stringify(v):String(v)).slice(0,40)}catch(e){return '?'}}
+function stamp(){return '+'+((Date.now()-DG.t0)/1000).toFixed(2)+'s'}
+
+function diagEvt(e){
+  var t=e.target;
+  if(!t||!t.closest||t.closest('#__mines_panel')||t.closest('#__mines_fab'))return;
+  var inp=safeQuery(S.betInput);
+  var syn=e.isTrusted?'':'(合成)';
+  if(e.type==='click'||e.type==='pointerdown'){
+    var b=t.closest('button,[role=button],a')||t;
+    var txt=(b.textContent||'').trim().replace(/\s+/g,' ').slice(0,20);
+    DG.events.push(stamp()+' '+e.type+syn+' <'+b.tagName.toLowerCase()+'> "'+txt+'" | 金額框='+(inp?inp.value:'?')+' '+(inp?usdHint(inp):''));
+  }else if(t===inp){
+    DG.events.push(stamp()+' '+e.type+syn+(e.inputType?' '+e.inputType:'')+(e.data!=null?' data="'+e.data+'"':'')+(e.key?' key='+e.key:'')+' | value="'+t.value+'"');
+  }else if(t.tagName==='INPUT'){
+    DG.events.push(stamp()+' '+e.type+syn+' (其他輸入框)');
+  }
+  if(DG.events.length>400)DG.events.shift();
+}
+
+function diagStatic(){
+  var out=[];
+  out.push('頁面: '+location.pathname+' | 視窗: '+innerWidth+'x'+innerHeight);
+  var bet=safeQuery(S.betInput);
+  var inputs=Array.prototype.filter.call(document.querySelectorAll('input'),function(el){return !el.closest('#__mines_panel')});
+  out.push('== 頁面上的 input ('+inputs.length+') ==');
+  inputs.forEach(function(el,idx){
+    var gp=el.parentElement&&el.parentElement.parentElement;
+    var ctx=gp?gp.textContent.trim().replace(/\s+/g,' ').slice(0,30):'';
+    out.push(idx+(el===bet?' [Bot用]':'')+': type='+el.type+' 可見='+(el.offsetParent!==null)+' value="'+el.value+'" inputmode='+(el.inputMode||'-')+' ctx="'+ctx+'"');
+  });
+  if(!bet){out.push('找不到 Bot 的下注輸入框，請先自動偵測');return out.join('\n')}
+  out.push('== 下注框 HTML ==');
+  out.push(bet.outerHTML.slice(0,400));
+  out.push('USD 提示: '+(usdHint(bet)||'(沒找到)'));
+  out.push('== DOM 上的 React props（input 與 5 層父元素）==');
+  var el=bet;
+  for(var d=0;d<6&&el;d++){
+    var pk=Object.keys(el).find(function(k){return k.indexOf('__reactProps$')===0});
+    if(pk&&el[pk]){
+      var pr=el[pk];
+      var ks=Object.keys(pr).filter(function(k){return k!=='children'});
+      out.push('['+d+'] <'+el.tagName.toLowerCase()+'> '+ks.join(','));
+      ks.forEach(function(k){
+        if(typeof pr[k]==='function'&&k.indexOf('on')===0)out.push('   '+k+': '+fnSrc(pr[k]));
+        else if(/value|amount/i.test(k))out.push('   '+k+' = '+short(pr[k]));
+      });
+    }
+    el=el.parentElement;
+  }
+  out.push('== React 元件（由下往上）==');
+  var fk=Object.keys(bet).find(function(k){return k.indexOf('__reactFiber$')===0||k.indexOf('__reactInternalInstance$')===0});
+  var f=fk?bet[fk]:null,n=0,steps=0;
+  if(!f)out.push('(找不到 React fiber)');
+  while(f&&n<25&&steps<300){
+    steps++;
+    var ty=f.type;
+    if(ty&&typeof ty!=='string'){
+      var name=ty.displayName||ty.name||(ty.render&&(ty.render.displayName||ty.render.name))||(ty._context?'Context':'匿名');
+      var mp=f.memoizedProps&&typeof f.memoizedProps==='object'?f.memoizedProps:{};
+      var pks=Object.keys(mp).filter(function(k){return k!=='children'});
+      var line=n+'. '+name+' ['+pks.slice(0,20).join(',')+']';
+      var rel=pks.filter(function(k){return /amount|value|bet|min|max|currency|decimal|precision/i.test(k)&&typeof mp[k]!=='function'});
+      if(rel.length)line+=' {'+rel.map(function(k){return k+'='+short(mp[k])}).join(' ')+'}';
+      /* 只列數字型的 hook 狀態，避免帶出個人資料 */
+      var hs=[],h=f.memoizedState,hi=0;
+      while(h&&typeof h==='object'&&'next' in h&&hi<20){
+        var v=h.memoizedState;
+        if(typeof v==='number'||typeof v==='boolean'||(typeof v==='string'&&/^-?[\d.]*$/.test(v)))hs.push(hi+':'+JSON.stringify(v));
+        h=h.next;hi++;
+      }
+      if(hs.length)line+=' hooks['+hs.join(' ')+']';
+      out.push(line);
+      pks.forEach(function(k){
+        if(typeof mp[k]==='function'&&/^on(Change|Input|Blur|Focus|KeyDown|Value|Amount)|amount|setValue|setBet/i.test(k))out.push('   '+k+': '+fnSrc(mp[k]));
+      });
+      n++;
+    }
+    f=f.return;
+  }
+  return out.join('\n');
+}
+
 /* ============ 策略主迴圈 ============ */
 async function run(){
   if(ST.running){addLog('已在運行中','r');return}
@@ -977,6 +1096,52 @@ async function run(){
 
 /* ============ 按鈕事件 ============ */
 document.getElementById('__btn_start').addEventListener('click',function(){run()});
+
+document.getElementById('__diag_rec').addEventListener('click',function(){
+  if(DG.rec)return;
+  DG.rec=true;DG.t0=Date.now();DG.events=['+0.00s ===== 開始錄製 ====='];
+  DG_TYPES.forEach(function(t){document.addEventListener(t,diagEvt,true)});
+  var i0=safeQuery(S.betInput);
+  DG.last=i0?i0.value+' '+usdHint(i0):'';
+  DG.poll=setInterval(function(){
+    var i=safeQuery(S.betInput);
+    var cur=i?i.value+' '+usdHint(i):'(無輸入框)';
+    if(cur!==DG.last){DG.events.push(stamp()+' 金額框變成 '+cur);DG.last=cur}
+  },150);
+  this.textContent='錄製中...';
+  this.style.opacity='0.6';
+  addLog('診斷錄製開始','a');
+});
+document.getElementById('__diag_fill').addEventListener('click',async function(){
+  if(ST.running){addLog('策略執行中，請先停止','r');return}
+  if(!S.betInput){addLog('請先到選擇器頁自動偵測','r');return}
+  if(DG.rec)DG.events.push(stamp()+' ===== Bot 開始填入 '+C.baseBet+' =====');
+  try{await setBet(C.baseBet)}catch(e){addLog('填入失敗: '+e.message,'l')}
+  if(DG.rec)DG.events.push(stamp()+' ===== Bot 填入結束 =====');
+});
+document.getElementById('__diag_stop').addEventListener('click',function(){
+  var ev=[];
+  if(DG.rec){
+    DG.rec=false;
+    DG_TYPES.forEach(function(t){document.removeEventListener(t,diagEvt,true)});
+    clearInterval(DG.poll);
+    var b=document.getElementById('__diag_rec');
+    b.textContent='開始錄製';
+    b.style.opacity='1';
+    ev=DG.events;
+  }
+  var rep;
+  try{rep=diagStatic()}catch(e){rep='靜態診斷失敗: '+e.message}
+  document.getElementById('__diag_out').value='=== 踩地雷 Bot 診斷報告 ===\n'+rep+'\n\n== 錄製事件 ('+ev.length+') ==\n'+ev.join('\n');
+  addLog('診斷報告已產生','a');
+});
+document.getElementById('__diag_copy').addEventListener('click',function(){
+  var ta=document.getElementById('__diag_out');
+  if(!ta.value){addLog('請先產生報告','r');return}
+  function done(){var b=document.getElementById('__diag_copy');b.textContent='已複製 ✓';setTimeout(function(){b.textContent='複製報告'},1500)}
+  function fb(){ta.select();document.execCommand('copy');done()}
+  if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(done,fb);else fb();
+});
 document.getElementById('__btn_stop').addEventListener('click',function(){
   ST.stop=true;ST.running=false;
   document.getElementById('__btn_start').style.display='';
