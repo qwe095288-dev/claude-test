@@ -518,18 +518,43 @@ function setBet(amount){
   var inp=document.querySelector(S.betInput);
   if(!inp)throw new Error('找不到下注輸入框');
   var val=amount.toFixed(4);
-  inp.focus();
-  inp.setSelectionRange(0,inp.value.length);
-  document.execCommand('insertText',false,val);
-  if(inp.value!==val){
-    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    var tracker=inp._valueTracker;
-    if(tracker){tracker.setValue('')}
-    setter.call(inp,val);
-    inp.dispatchEvent(new Event('input',{bubbles:true}));
-    inp.dispatchEvent(new Event('change',{bubbles:true}));
+
+  /* 方法1：找 React fiber 的 onChange 直接呼叫 */
+  var propsKey=Object.keys(inp).find(function(k){return k.startsWith('__reactProps$')});
+  if(propsKey&&inp[propsKey]&&inp[propsKey].onChange){
+    var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+    nativeSetter.call(inp,val);
+    inp[propsKey].onChange({target:inp,currentTarget:inp});
+    addLog('  輸入框設為: '+val+' (React props)','a');
+    return;
   }
-  addLog('  輸入框設為: '+val+' (實際: '+inp.value+')','a');
+
+  /* 方法2：找 React fiber 往上爬找 state setter */
+  var fiberKey=Object.keys(inp).find(function(k){return k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$')});
+  if(fiberKey){
+    var fiber=inp[fiberKey];
+    var node=fiber;
+    for(var i=0;i<15&&node;i++){
+      if(node.memoizedProps&&node.memoizedProps.onChange){
+        var nativeSetter2=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+        nativeSetter2.call(inp,val);
+        node.memoizedProps.onChange({target:inp,currentTarget:inp});
+        addLog('  輸入框設為: '+val+' (React fiber)','a');
+        return;
+      }
+      node=node.return;
+    }
+  }
+
+  /* 方法3：fallback — nativeSetter + valueTracker + 事件 */
+  inp.focus();
+  var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+  var tracker=inp._valueTracker;
+  if(tracker){tracker.setValue('')}
+  setter.call(inp,val);
+  inp.dispatchEvent(new Event('input',{bubbles:true}));
+  inp.dispatchEvent(new Event('change',{bubbles:true}));
+  addLog('  輸入框設為: '+val+' (fallback, 實際: '+inp.value+')','a');
 }
 
 /* 按文字內容找按鈕 — 比 CSS 選擇器可靠得多 */
