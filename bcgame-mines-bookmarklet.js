@@ -548,11 +548,19 @@ document.getElementById('__btn_auto').addEventListener('click',function(){
 });
 
 function genSel(el){
-  if(el.id)return'#'+el.id;
+  if(el.id)return'#'+CSS.escape(el.id);
   if(el.getAttribute('data-testid'))return'[data-testid="'+el.getAttribute('data-testid')+'"]';
   var tag=el.tagName.toLowerCase();
-  var cls=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\s+/).slice(0,2).join('.'):'';
+  var cls=el.className&&typeof el.className==='string'?
+    '.'+el.className.trim().split(/\s+/).slice(0,2).map(function(c){return CSS.escape(c)}).join('.'):'';
   return tag+cls;
+}
+
+function safeQuery(sel){
+  try{return document.querySelector(sel)}catch(e){return null}
+}
+function safeQueryAll(sel){
+  try{return document.querySelectorAll(sel)}catch(e){return[]}
 }
 
 /* ============ 檢查就緒 ============ */
@@ -599,7 +607,7 @@ function addLog(msg,cls){
 /* ============ DOM 工具 ============ */
 function getBalance(){
   if(!S.balance)return null;
-  var el=document.querySelector(S.balance);
+  var el=safeQuery(S.balance);
   if(!el)return null;
   return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||null;
 }
@@ -610,7 +618,7 @@ async function setBet(amount){
 
   /* 每次重新查詢 input 元素（cashout 後 DOM 可能重建） */
   function getInp(){
-    return document.querySelector(S.betInput);
+    return safeQuery(S.betInput);
   }
 
   var inp=getInp();
@@ -818,7 +826,7 @@ function clickBetButton(){
   var btn=findBtnByText(['投注','Bet','下注','Start','Play']);
   /* 備案：用自動偵測時存的選擇器 */
   if(!btn&&S.betButton){
-    btn=document.querySelector(S.betButton);
+    btn=safeQuery(S.betButton);
     if(btn)addLog('  用儲存的選擇器找到投注按鈕','a');
   }
   if(!btn){
@@ -845,7 +853,7 @@ function clickEl(sel,name){
 }
 
 function getOpenTiles(){
-  var all=document.querySelectorAll(S.tiles);
+  var all=safeQueryAll(S.tiles);
   addLog('  找到 '+all.length+' 個格子元素','a');
   if(all.length===0)return[];
   var open=Array.from(all).filter(function(t){
