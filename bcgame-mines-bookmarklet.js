@@ -676,12 +676,19 @@ async function run(){
 
       var busted=false;
       for(var p=0;p<C.picks;p++){
-        var avail=getOpenTiles();
-        if(avail.length===0){addLog('  沒有可點的格子','l');busted=true;break}
-        var pick=avail[Math.floor(Math.random()*avail.length)];
-        /* 用觸控模擬點擊格子，相容手機 Safari */
-        tapElement(pick);
-        addLog('  開第'+(p+1)+'格','a');
+        /* 用 BC Game 內建的「隨機選取一個方塊」按鈕，繞過格子 DOM 事件問題 */
+        var randBtn=findBtnByText(['隨機選取一個方塊','隨機選取','Pick random','Random tile','Pick a random']);
+        if(randBtn){
+          randBtn.click();
+          addLog('  開第'+(p+1)+'格 (隨機按鈕)','a');
+        }else{
+          /* 備用方案：直接點格子 */
+          var avail=getOpenTiles();
+          if(avail.length===0){addLog('  沒有可點的格子也沒有隨機按鈕','l');busted=true;break}
+          var pick=avail[Math.floor(Math.random()*avail.length)];
+          tapElement(pick);
+          addLog('  開第'+(p+1)+'格 (直接點格子)','a');
+        }
         await wait(C.delayClick);
       }
 
