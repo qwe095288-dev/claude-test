@@ -514,47 +514,42 @@ function getBalance(){
   return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||null;
 }
 
-function setBet(amount){
+async function setBet(amount){
   var inp=document.querySelector(S.betInput);
   if(!inp)throw new Error('找不到下注輸入框');
   var val=amount.toFixed(4);
 
-  /* 方法1：找 React fiber 的 onChange 直接呼叫 */
-  var propsKey=Object.keys(inp).find(function(k){return k.startsWith('__reactProps$')});
-  if(propsKey&&inp[propsKey]&&inp[propsKey].onChange){
-    var nativeSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-    nativeSetter.call(inp,val);
-    inp[propsKey].onChange({target:inp,currentTarget:inp});
-    addLog('  輸入框設為: '+val+' (React props)','a');
-    return;
+  function doSet(){
+    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+    var tracker=inp._valueTracker;
+    if(tracker){tracker.setValue('')}
+    setter.call(inp,val);
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  /* 方法2：找 React fiber 往上爬找 state setter */
-  var fiberKey=Object.keys(inp).find(function(k){return k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$')});
-  if(fiberKey){
-    var fiber=inp[fiberKey];
-    var node=fiber;
-    for(var i=0;i<15&&node;i++){
-      if(node.memoizedProps&&node.memoizedProps.onChange){
-        var nativeSetter2=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-        nativeSetter2.call(inp,val);
-        node.memoizedProps.onChange({target:inp,currentTarget:inp});
-        addLog('  輸入框設為: '+val+' (React fiber)','a');
-        return;
-      }
-      node=node.return;
-    }
-  }
-
-  /* 方法3：fallback — nativeSetter + valueTracker + 事件 */
+  /* 先 tap + focus 暖機，確保 React 知道 input 被互動了 */
+  tapElement(inp);
   inp.focus();
-  var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-  var tracker=inp._valueTracker;
-  if(tracker){tracker.setValue('')}
-  setter.call(inp,val);
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
-  inp.dispatchEvent(new Event('change',{bubbles:true}));
-  addLog('  輸入框設為: '+val+' (fallback, 實際: '+inp.value+')','a');
+  await wait(150);
+
+  doSet();
+  await wait(100);
+
+  /* 驗證：如果值沒設成功，重試最多 3 次 */
+  for(var retry=0;retry<3;retry++){
+    var actual=parseFloat(inp.value)||0;
+    if(Math.abs(actual-amount)<0.01){
+      addLog('  輸入框: '+inp.value,'a');
+      return;
+    }
+    addLog('  設值重試('+(retry+1)+') 目標:'+val+' 實際:'+inp.value,'r');
+    inp.focus();
+    inp.setSelectionRange(0,inp.value.length);
+    doSet();
+    await wait(200);
+  }
+  addLog('  輸入框最終: '+inp.value+' (目標:'+val+')','r');
 }
 
 /* 按文字內容找按鈕 — 比 CSS 選擇器可靠得多 */
@@ -694,8 +689,8 @@ async function run(){
       }
 
       addLog('['+ST.rounds+'] 下注 '+ST.bet.toFixed(6),'a');
-      setBet(ST.bet);
-      await wait(400);
+      await setBet(ST.bet);
+      await wait(200);
 
       /* 用文字匹配找「投注」按鈕，不依賴 CSS 選擇器 */
       clickBetButton();
@@ -710,18 +705,20 @@ async function run(){
 
       var busted=false;
       for(var p=0;p<C.picks;p++){
-        /* 用 BC Game 內建的「隨機選取一個方塊」按鈕，繞過格子 DOM 事件問題 */
-        var randBtn=findBtnByText(['隨機選取一個方塊','隨機選取','Pick random','Random tile','Pick a random']);
-        if(randBtn){
-          randBtn.click();
-          addLog('  開第'+(p+1)+'格 (隨機按鈕)','a');
-        }else{
-          /* 備用方案：直接點格子 */
-          var avail=getOpenTiles();
-          if(avail.length===0){addLog('  沒有可點的格子也沒有隨機按鈕','l');busted=true;break}
-          var pick=avail[Math.floor(Math.random()*avail.length)];
-          tapElement(pick);
-          addLog('  開第'+(p+1)+'格 (直接點格子)','a');
+        var clicked=false;
+        /* 嘗試找隨機按鈕，最多重試 5 次（動畫期間按鈕可能暫時消失） */
+        for(var rt=0;rt<5;rt++){
+          var randBtn=findBtnByText(['隨機選取一個方塊','隨機選取','Pick random','Random tile','Pick a random']);
+          if(randBtn){
+            randBtn.click();
+            addLog('  開第'+(p+1)+'格 (隨機按鈕)','a');
+            clicked=true;
+            break;
+          }
+          await wait(300);
+        }
+        if(!clicked){
+          addLog('  第'+(p+1)+'格找不到隨機按鈕，跳過','r');
         }
         await wait(C.delayClick);
       }
