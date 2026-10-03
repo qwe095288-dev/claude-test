@@ -1,6 +1,12 @@
 javascript:void(function(){
 /* 防止重複載入 */
-if(window.__MINES_BOT){window.__MINES_BOT.toggle();return}
+var VER='__BUILD__';
+if(window.__MINES_BOT){
+  /* 舊版還在頁面上時只切換面板會讓舊程式繼續跑，必須重新整理才能載入新版 */
+  if(window.__MINES_BOT.ver===VER){window.__MINES_BOT.toggle();return}
+  alert('頁面上還有舊版的踩地雷 Bot。\n請先重新整理（F5）BC Game 頁面，再點一次書籤。');
+  return;
+}
 
 /* ============ 策略參數 ============ */
 var C={
@@ -322,7 +328,7 @@ document.getElementById('__mp_mini').addEventListener('click',function(e){
   updateFab();
 });
 
-window.__MINES_BOT={toggle:function(){
+window.__MINES_BOT={ver:VER,toggle:function(){
   if(panel.style.display==='none'&&fab.style.display==='none'){
     panel.style.display='flex';
   }else if(panel.style.display!=='none'){
@@ -664,6 +670,7 @@ async function setBet(amount,alive){
       await wait(200);chk();
     }
     if(!inp)throw new Error('找不到下注輸入框');
+    if(inp.disabled||inp.readOnly)throw new Error('下注框目前鎖住（可能還有進行中的牌局），等一下再試');
 
     var v0=parseFloat(inp.value)||0,h0=hintNum(inp);
     if(v0>0&&h0>0)ST.rate=v0/h0;
@@ -1031,7 +1038,7 @@ async function run(){
           addLog('連續 3 次投注沒生效，自動停止','l');
           break;
         }
-        await wait(1000);
+        for(var nw=0;nw<5&&alive();nw++)await wait(200);
         continue;
       }
       ST.betFails=0;
@@ -1111,7 +1118,7 @@ async function run(){
       }
 
       updateUI();
-      await wait(C.delayRound);
+      for(var dr=0;dr<C.delayRound&&alive();dr+=200)await wait(200);
 
     }catch(err){
       if(!alive())break;

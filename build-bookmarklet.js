@@ -1,8 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const dir = __dirname;
-const src = fs.readFileSync(path.join(dir, 'bcgame-mines-bookmarklet.js'), 'utf8');
+const raw = fs.readFileSync(path.join(dir, 'bcgame-mines-bookmarklet.js'), 'utf8');
+const ver = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 8);
+const src = raw.replace('__BUILD__', ver);
 
 const min = src
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -57,7 +60,7 @@ h1{font-size:24px;color:var(--green);margin-bottom:8px;text-align:center}
 <h2><span class="num">1</span>拖曳安裝（推薦）</h2>
 <div class="drag-area">
 <a class="bookmark-link" id="bmLink" href="#">踩地雷 Bot</a>
-<p class="hint">把上面的按鈕拖到書籤列即可（舊書籤請先刪除）</p>
+<p class="hint">把上面的按鈕拖到書籤列即可（舊書籤請先刪除，並重新整理 BC Game 頁面）</p>
 </div>
 </div>
 
@@ -120,5 +123,6 @@ document.getElementById('copyBtn').addEventListener('click',function(){
 `.replace('__CODE__', () => embedded);
 
 fs.writeFileSync(path.join(dir, 'bcgame-mines-install.html'), html);
+console.log('version:', ver);
 console.log('min.js:', Buffer.byteLength(bookmarklet), 'bytes');
 console.log('install.html:', Buffer.byteLength(html), 'bytes');
