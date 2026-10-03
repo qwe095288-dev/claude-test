@@ -703,23 +703,72 @@ async function setBet(amount){
     i.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  /* 策略 E: 點預設按鈕暖機 → 再 React set */
-  async function presetThenSet(){
+  /* 策略 E: 透過 React fiber 直接呼叫 onChange */
+  function reactFiberSet(){
+    var i=getInp();
+    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+    /* 找 __reactProps$ key，直接拿 onChange */
+    var propsKey=Object.keys(i).find(function(k){return k.startsWith('__reactProps$')});
+    if(propsKey&&i[propsKey]&&i[propsKey].onChange){
+      setter.call(i,val);
+      i[propsKey].onChange({target:i,currentTarget:i,type:'change'});
+      return true;
+    }
+    /* 備用：走 fiber tree 找 onChange */
+    var fiberKey=Object.keys(i).find(function(k){
+      return k.startsWith('__reactFiber$')||k.startsWith('__reactInternalInstance$');
+    });
+    if(!fiberKey)return false;
+    var node=i[fiberKey];
+    for(var d=0;d<15&&node;d++){
+      if(node.memoizedProps&&typeof node.memoizedProps.onChange==='function'){
+        setter.call(i,val);
+        node.memoizedProps.onChange({target:i,currentTarget:i,type:'change'});
+        return true;
+      }
+      node=node.return;
+    }
+    return false;
+  }
+
+  /* 策略 F: 模擬剪貼簿貼上 */
+  async function clipboardPaste(){
+    var i=getInp();
+    i.focus();
+    i.select();
+    await wait(30);
+    var dt=new DataTransfer();
+    dt.setData('text/plain',val);
+    i.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));
+    await wait(50);
+    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+    if(parseFloat(i.value)!==amount){
+      setter.call(i,val);
+      i.dispatchEvent(new InputEvent('input',{bubbles:true,data:val,inputType:'insertFromPaste'}));
+      i.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+  }
+
+  /* 策略 G: 點預設按鈕暖機 → 再 React fiber */
+  async function presetThenFiber(){
     var presetBtn=findBtnByText(['10','100','1']);
     if(presetBtn){
-      presetBtn.click();
-      await wait(300);
+      tapElement(presetBtn);
+      await wait(400);
     }
-    reactSetWithClear();
+    if(!reactFiberSet()){
+      reactSetWithClear();
+    }
   }
 
   /* 依序嘗試各策略 */
   var strategies=[
+    {name:'reactFiber',fn:async function(){tapElement(getInp());getInp().focus();await wait(150);if(!reactFiberSet())throw new Error('no fiber')}},
     {name:'reactClear',fn:async function(){tapElement(getInp());getInp().focus();await wait(150);reactSetWithClear()}},
     {name:'execCmd',fn:async function(){await execCmdSet()}},
-    {name:'react',fn:async function(){getInp().focus();await wait(100);reactSet()}},
+    {name:'paste',fn:async function(){await clipboardPaste()}},
     {name:'keyboard',fn:async function(){await keyboardSet()}},
-    {name:'preset+react',fn:async function(){await presetThenSet()}}
+    {name:'preset+fiber',fn:async function(){await presetThenFiber()}}
   ];
 
   for(var si=0;si<strategies.length;si++){
@@ -736,18 +785,18 @@ async function setBet(amount){
     await wait(100);
   }
 
-  /* 全部策略都失敗，最後一搏：重試最佳策略兩次 */
+  /* 全部策略都失敗，最後一搏 */
   for(var fi=0;fi<2;fi++){
     await wait(500);
     tapElement(getInp());
     getInp().focus();
     await wait(300);
+    try{reactFiberSet()}catch(e){}
+    await wait(100);
+    if(checkVal()){addLog('  輸入框: '+getInp().value+' (finalRetry-fiber)','a');return}
     reactSetWithClear();
     await wait(200);
-    if(checkVal()){
-      addLog('  輸入框: '+getInp().value+' (finalRetry)','a');
-      return;
-    }
+    if(checkVal()){addLog('  輸入框: '+getInp().value+' (finalRetry-clear)','a');return}
   }
 
   addLog('  輸入框最終: '+getInp().value+' (目標:'+val+') 全策略失敗','l');
@@ -938,8 +987,17 @@ async function run(){
       await setBet(ST.bet);
       await wait(300);
 
+      /* 驗證下注金額 — 如果值被重設就再試一次 */
+      var betInp=safeQuery(S.betInput);
+      var actualBet=betInp?parseFloat(betInp.value)||0:0;
+      if(Math.abs(actualBet-ST.bet)>=0.5){
+        addLog('  投注前驗證失敗('+actualBet+')，重試...','r');
+        await setBet(ST.bet);
+        await wait(200);
+      }
+
       clickBetButton();
-      addLog('  已點投注','a');
+      addLog('  已點投注 (金額:'+((betInp&&betInp.value)||'?')+')','a');
       await wait(C.delayAfterBet);
 
       if(!checkStillOnPage()){
