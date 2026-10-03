@@ -244,7 +244,7 @@ document.getElementById('__btn_savecfg').addEventListener('click',function(){
 var selKeys=[
   {key:'betInput',label:'下注輸入框'},
   {key:'betButton',label:'下注按鈕'},
-  {key:'cashoutButton',label:'Cashout 按鈕'},
+  {key:'cashoutButton',label:'Cashout 按鈕 (可自動找)'},
   {key:'tiles',label:'格子 (25個)'},
   {key:'balance',label:'餘額顯示 (選填)'}
 ];
@@ -274,95 +274,180 @@ function startPick(key){
   addLog('請點擊頁面上的「'+label+'」','a');
   panel.style.display='none';
 
-  var overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:999998;background:rgba(0,0,0,.3);display:flex;align-items:flex-start;justify-content:center;padding-top:60px';
-  overlay.innerHTML='<div style="background:#1a1d2a;color:#fbbf24;padding:12px 20px;border-radius:8px;font-size:14px;font-family:sans-serif">請點擊「'+label+'」元素</div>';
-  document.body.appendChild(overlay);
+  /* 提示條：pointer-events:none 讓觸控穿透到底下的元素 */
+  var banner=document.createElement('div');
+  banner.id='__mines_pick_banner';
+  banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999998;background:#1a1d2a;color:#fbbf24;padding:14px 20px;font-size:14px;font-family:sans-serif;text-align:center;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.5)';
+  banner.textContent='請點擊「'+label+'」元素';
+  document.body.appendChild(banner);
+
+  /* 取消按鈕：這個需要能被點擊 */
+  var cancelBtn=document.createElement('div');
+  cancelBtn.style.cssText='position:fixed;top:50px;right:12px;z-index:999998;background:#f87171;color:#fff;padding:8px 14px;border-radius:6px;font-size:13px;font-family:sans-serif;cursor:pointer';
+  cancelBtn.textContent='取消選取';
+  document.body.appendChild(cancelBtn);
+  cancelBtn.addEventListener('click',function(e){
+    e.stopPropagation();
+    cleanup();
+    panel.style.display='flex';
+    addLog('已取消選取','r');
+  });
+
+  var handled=false;
+  function cleanup(){
+    handled=true;
+    banner.remove();
+    cancelBtn.remove();
+    document.removeEventListener('click',handler,true);
+  }
 
   function handler(e){
-    if(e.target===overlay||overlay.contains(e.target))return;
+    if(handled)return;
+    var el=e.target;
+    /* 忽略我們自己的元素 */
+    if(el===cancelBtn||el===banner)return;
+    if(el.closest&&el.closest('#__mines_panel'))return;
+
     e.preventDefault();
     e.stopPropagation();
 
-    var el=e.target;
-    var sel='';
-    if(el.id){sel='#'+el.id}
-    else if(el.getAttribute('data-testid')){sel='[data-testid="'+el.getAttribute('data-testid')+'"]'}
-    else{
-      var tag=el.tagName.toLowerCase();
-      var cls=el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\s+/).slice(0,2).join('.'):'';
-      sel=tag+cls;
-    }
-
+    var sel=genSel(el);
     S[key]=sel;
     addLog(label+' → '+sel,'a');
+    cleanup();
     panel.style.display='flex';
-    overlay.remove();
-    document.removeEventListener('click',handler,true);
-    document.removeEventListener('touchend',handler,true);
     renderSelectors();
     checkReady();
   }
 
   setTimeout(function(){
     document.addEventListener('click',handler,true);
-    document.addEventListener('touchend',handler,true);
-  },300);
+  },400);
 }
 
 /* ============ 自動偵測 ============ */
 document.getElementById('__btn_auto').addEventListener('click',function(){
   addLog('開始自動偵測...','a');
 
-  /* 找 input */
-  var inputs=document.querySelectorAll('input[type="number"],input[type="text"],input:not([type])');
+  /* 找下注輸入框 — BC Game 的金額輸入框 */
+  var inputs=document.querySelectorAll('input');
   for(var i=0;i<inputs.length;i++){
     var inp=inputs[i];
     if(inp.closest('#__mines_panel'))continue;
     var ph=(inp.placeholder||'').toLowerCase();
     var nm=(inp.name||'').toLowerCase();
-    if(ph.includes('bet')||ph.includes('amount')||nm.includes('bet')||nm.includes('amount')||inp.type==='number'){
+    var ar=(inp.getAttribute('aria-label')||'').toLowerCase();
+    /* 往上找父元素有沒有包含「金額」文字 */
+    var parent=inp.parentElement;
+    var parentText='';
+    for(var up=0;up<5&&parent;up++){
+      parentText+=parent.textContent||'';
+      parent=parent.parentElement;
+    }
+    parentText=parentText.toLowerCase();
+    if(
+      ph.includes('bet')||ph.includes('amount')||ph.includes('金額')||
+      nm.includes('bet')||nm.includes('amount')||
+      ar.includes('bet')||ar.includes('amount')||ar.includes('金額')||
+      (parentText.includes('金額')&&!parentText.includes('礦山'))
+    ){
       S.betInput=genSel(inp);
       addLog('下注輸入框 → '+S.betInput,'a');
       break;
     }
   }
+  /* 如果上面沒找到，退而求其次找第一個非面板的 input */
+  if(!S.betInput){
+    for(var i=0;i<inputs.length;i++){
+      if(!inputs[i].closest('#__mines_panel')&&inputs[i].type!=='range'&&inputs[i].type!=='hidden'&&inputs[i].type!=='checkbox'&&inputs[i].type!=='radio'){
+        S.betInput=genSel(inputs[i]);
+        addLog('下注輸入框 (猜測) → '+S.betInput,'a');
+        break;
+      }
+    }
+  }
 
-  /* 找按鈕 */
+  /* 找按鈕 — 加入 BC Game 中文 UI：投注、提現 */
   var btns=document.querySelectorAll('button');
+  var betBtnCandidates=[];
+  var cashoutCandidates=[];
   btns.forEach(function(btn){
     if(btn.closest('#__mines_panel'))return;
-    var txt=btn.textContent.trim().toLowerCase();
-    if(!S.betButton&&(txt.includes('bet')||txt.includes('下注')||txt.includes('start'))){
-      S.betButton=genSel(btn);
-      addLog('下注按鈕 → '+S.betButton,'a');
+    var txt=btn.textContent.trim();
+    var txtL=txt.toLowerCase();
+    /* 下注按鈕 */
+    if(txtL==='bet'||txt==='投注'||txt==='下注'||txtL==='start'||txtL==='play'){
+      betBtnCandidates.push(btn);
     }
-    if(!S.cashoutButton&&(txt.includes('cashout')||txt.includes('cash out')||txt.includes('提現')||txt.includes('取款'))){
-      S.cashoutButton=genSel(btn);
-      addLog('Cashout → '+S.cashoutButton,'a');
+    /* Cashout 按鈕 */
+    if(txtL.includes('cashout')||txtL.includes('cash out')||
+       txt.includes('提現')||txt.includes('取款')||txt.includes('兌現')||
+       txtL.includes('withdraw')||txtL.includes('take')){
+      cashoutCandidates.push(btn);
     }
   });
 
-  /* 找 25 個格子 */
+  if(betBtnCandidates.length>0){
+    /* 優先選最大的按鈕（通常是主要 CTA） */
+    betBtnCandidates.sort(function(a,b){
+      return(b.offsetWidth*b.offsetHeight)-(a.offsetWidth*a.offsetHeight);
+    });
+    S.betButton=genSel(betBtnCandidates[0]);
+    addLog('下注按鈕 → '+S.betButton+' ('+betBtnCandidates[0].textContent.trim()+')','a');
+  }
+
+  if(cashoutCandidates.length>0){
+    S.cashoutButton=genSel(cashoutCandidates[0]);
+    addLog('Cashout → '+S.cashoutButton+' ('+cashoutCandidates[0].textContent.trim()+')','a');
+  }
+  if(!S.cashoutButton){
+    addLog('Cashout 按鈕在下注後才會出現，先跳過','r');
+  }
+
+  /* 找 25 個格子 — 嘗試多種數量 */
   var classMap={};
   document.querySelectorAll('*').forEach(function(el){
     if(el.closest('#__mines_panel'))return;
     if(el.className&&typeof el.className==='string'){
-      var first=el.className.trim().split(/\s+/)[0];
-      if(first){classMap[first]=(classMap[first]||0)+1}
+      el.className.trim().split(/\s+/).forEach(function(c){
+        if(c){classMap[c]=(classMap[c]||0)+1}
+      });
     }
   });
+  var found25=false;
   for(var cls in classMap){
     if(classMap[cls]===25){
-      S.tiles='.'+cls;
-      addLog('格子 → .'+cls+' (25個)','a');
+      var testEls=document.querySelectorAll('.'+CSS.escape(cls));
+      var first=testEls[0];
+      if(first&&first.offsetWidth>10&&first.offsetWidth<200&&first.offsetHeight>10){
+        S.tiles='.'+cls;
+        addLog('格子 → .'+cls+' (25個)','a');
+        found25=true;
+        break;
+      }
+    }
+  }
+  if(!found25){
+    addLog('沒有找到 25 個格子，請手動選取其中一格','r');
+  }
+
+  /* 找餘額 — 通常在頂部有 $ 符號 */
+  var allEls=document.querySelectorAll('*');
+  for(var i=0;i<allEls.length;i++){
+    var el=allEls[i];
+    if(el.closest('#__mines_panel'))continue;
+    if(el.children.length>2)continue;
+    var txt=el.textContent.trim();
+    if(/^\$[\d,.]+$/.test(txt)&&el.offsetWidth>0){
+      S.balance=genSel(el);
+      addLog('餘額 → '+S.balance+' ('+txt+')','a');
       break;
     }
   }
 
   renderSelectors();
   checkReady();
-  addLog('自動偵測完成，缺少的請手動選取','r');
+  addLog('偵測完成，缺少的請手動選取','r');
 });
 
 function genSel(el){
@@ -375,7 +460,8 @@ function genSel(el){
 
 /* ============ 檢查就緒 ============ */
 function checkReady(){
-  var ready=S.betInput&&S.betButton&&S.cashoutButton&&S.tiles;
+  /* Cashout 按鈕可以在遊戲中動態偵測，不強制要求預先設定 */
+  var ready=S.betInput&&S.betButton&&S.tiles;
   document.getElementById('__sel_warn').style.display=ready?'none':'block';
   document.getElementById('__btn_start').disabled=!ready;
   document.getElementById('__btn_start').style.opacity=ready?'1':'0.4';
@@ -482,7 +568,24 @@ async function run(){
       await wait(500);
 
       if(!busted){
-        var coBtn=document.querySelector(S.cashoutButton);
+        /* 先用預設選擇器找，找不到就動態搜尋頁面上的 Cashout 按鈕 */
+        var coBtn=S.cashoutButton?document.querySelector(S.cashoutButton):null;
+        if(!coBtn){
+          var allBtns=document.querySelectorAll('button');
+          for(var bi=0;bi<allBtns.length;bi++){
+            var btxt=allBtns[bi].textContent.trim().toLowerCase();
+            if(btxt.includes('cashout')||btxt.includes('cash out')||
+               btxt.includes('提現')||btxt.includes('取款')||btxt.includes('兌現')){
+              coBtn=allBtns[bi];
+              if(!S.cashoutButton){
+                S.cashoutButton=genSel(coBtn);
+                addLog('動態找到 Cashout → '+S.cashoutButton,'a');
+                renderSelectors();
+              }
+              break;
+            }
+          }
+        }
         if(coBtn&&!coBtn.disabled){
           coBtn.click();
           ST.wins++;
