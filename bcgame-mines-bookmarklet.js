@@ -4,7 +4,7 @@ if(window.__MINES_BOT){window.__MINES_BOT.toggle();return}
 
 /* ============ 策略參數 ============ */
 var C={
-  baseBet:3.1799,
+  baseBet:3.5,
   mines:4,
   picks:2,
   multiOnLoss:3,
@@ -25,6 +25,7 @@ var ST={
   rounds:0,wins:0,losses:0,resets:0,
   initBal:null,picking:false
 };
+var RUN_GEN=0;
 
 /* ============ UI 面板 ============ */
 var panel=document.createElement('div');
@@ -354,8 +355,8 @@ document.getElementById('__btn_savecfg').addEventListener('click',function(){
   C.maxLossStreak=parseInt(document.getElementById('__c_maxl').value)||3;
   C.maxRounds=parseInt(document.getElementById('__c_maxr').value)||500;
   C.delayRound=parseInt(document.getElementById('__c_delay').value)||2500;
-  ST.bet=C.baseBet;
-  addLog('參數已更新','a');
+  if(!ST.running)ST.bet=C.baseBet;
+  addLog(ST.running?'參數已更新（底注在下次贏或重置時生效）':'參數已更新','a');
   var btn=document.getElementById('__btn_savecfg');
   btn.textContent='已儲存 ✓';btn.style.background='#4ade80';btn.style.color='#0c0e14';
   setTimeout(function(){btn.textContent='儲存參數';btn.style.background='#2a2e3d';btn.style.color='#e2e4ea';},1500);
@@ -624,7 +625,7 @@ function getBalance(){
   return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||null;
 }
 
-/* 下注框附近 BC Game 顯示的「≈0.0999USD」換算提示 */
+/* 下注框附近 BC Game 顯示的「≈0.1098USDC」換算提示，代表遊戲實際存下的金額 */
 function usdHint(inp){
   var p=inp;
   for(var u=0;u<6&&p;u++){
@@ -638,62 +639,73 @@ function usdHint(inp){
   }
   return '';
 }
+function hintNum(inp){
+  var m=usdHint(inp).replace(/,/g,'').match(/[\d.]+/);
+  return m?parseFloat(m[0]):NaN;
+}
 
-/* ============ setBet ============ */
-async function setBet(amount){
+/* ============ setBet ============
+   BC Game 在 change/blur 時把顯示幣別(TWD)換成 USDC 並無條件捨去到小數 4 位，
+   一次提交會換算兩趟，所以 3.5 會變 3.4949；低於最低下注額會被歸零 */
+async function setBet(amount,alive){
+  alive=alive||function(){return true};
   var val=amount.toFixed(4);
+  function getInp(){return safeQuery(S.betInput)}
+  function chk(){if(!alive())throw new Error('已停止')}
+  function fatal(msg){var e=new Error(msg);e.fatal=true;return e}
 
-  /* 每次重新查詢 input 元素（cashout 後 DOM 可能重建） */
-  function getInp(){
-    return safeQuery(S.betInput);
-  }
-
-  var inp=getInp();
-  if(!inp)throw new Error('找不到下注輸入框');
-
-  /* 等待 input 可互動（cashout 後可能短暫 disabled） */
-  for(var w=0;w<15;w++){
-    inp=getInp();
-    if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)break;
-    await wait(200);
-  }
-  inp=getInp();
-  if(!inp)throw new Error('等待後仍找不到下注輸入框');
-
-  /* 匯率換算會讓顯示值有微小誤差，用 0.1% 相對誤差 */
-  function checkVal(){
-    var actual=parseFloat(getInp().value)||0;
-    return Math.abs(actual-amount)<=Math.max(0.0001,amount*0.001);
-  }
-
-  /* BC Game 只認瀏覽器原生 (isTrusted) 輸入事件；只有 execCommand 能產生，
-     用 dispatchEvent 假造的事件會讓輸入框看起來對、但點投注不會開局 */
-  async function execCmdSet(){
-    var i=getInp();
-    i.focus();
-    await wait(50);
-    i.select();
-    document.execCommand('selectAll',false,null);
-    document.execCommand('delete',false,null);
-    await wait(50);
-    document.execCommand('insertText',false,val);
-  }
-
+  var prevActual=null;
   for(var attempt=1;attempt<=4;attempt++){
-    try{
-      await execCmdSet();
-      await wait(150);
-      /* 真人點投注時輸入框會先失焦；合成的 click 不會移動焦點，所以手動失焦讓 BC Game 存入金額 */
-      getInp().blur();
-      await wait(350);
-      if(checkVal()){
-        var hint=usdHint(getInp());
-        addLog('  輸入框: '+getInp().value+(hint?' ('+hint+')':'')+(attempt>1?' (第'+attempt+'次成功)':''),'a');
-        return;
-      }
-    }catch(e){}
-    addLog('  輸入失敗 第'+attempt+'次, 實際:'+getInp().value,'r');
+    chk();
+    var inp=null;
+    for(var w=0;w<15;w++){
+      inp=getInp();
+      if(inp&&!inp.disabled&&!inp.readOnly&&inp.offsetParent!==null)break;
+      await wait(200);chk();
+    }
+    if(!inp)throw new Error('找不到下注輸入框');
+
+    var v0=parseFloat(inp.value)||0,h0=hintNum(inp);
+    if(v0>0&&h0>0)ST.rate=v0/h0;
+
+    inp.focus();
+    await wait(50);
+    inp.select();
+    document.execCommand('selectAll',false,null);
+    document.execCommand('insertText',false,val);
+    await wait(100);
+    /* 真人點投注時輸入框會先失焦觸發 change，BC Game 這時才存金額；合成 click 不會移動焦點 */
     getInp().blur();
+
+    /* 等數值與 ≈USDC 提示穩定（兩趟換算約 120ms） */
+    var last='',same=0;
+    for(var t=0;t<30;t++){
+      await wait(50);
+      var i2=getInp();
+      var cur=i2?i2.value+'|'+usdHint(i2):'';
+      same=cur===last?same+1:0;
+      last=cur;
+      if(t>=5&&same>=3)break;
+    }
+    chk();
+
+    var i3=getInp();
+    var actual=parseFloat(i3.value)||0,h=hintNum(i3);
+    if(actual>0&&h>0)ST.rate=actual/h;
+    var tol=ST.rate?0.0004*ST.rate+0.001:Math.max(0.02,amount*0.005);
+    var diff=amount-actual;
+    if(actual>0&&diff>=-0.0002&&diff<=tol&&document.activeElement!==i3){
+      addLog('  輸入框: '+i3.value+(usdHint(i3)?' ('+usdHint(i3)+')':'')+(attempt>1?' (第'+attempt+'次成功)':''),'a');
+      return actual;
+    }
+    addLog('  輸入失敗 第'+attempt+'次, 實際:'+i3.value+(usdHint(i3)?' ('+usdHint(i3)+')':''),'r');
+    if(actual===0){
+      throw fatal('金額 '+val+' 被 BC Game 歸零：換算成 USDC 低於最低下注額（約 0.1 USDC'+(ST.rate?' ≈ '+(0.1*ST.rate).toFixed(2):'')+'）。請到「參數」把底注調高，例如 3.5');
+    }
+    if(prevActual!==null&&actual===prevActual){
+      throw fatal('金額 '+val+' 連續兩次被改成 '+actual+'，BC Game 不接受這個金額，自動停止');
+    }
+    prevActual=actual;
     await wait(300*attempt);
   }
   throw new Error('無法設定下注金額 '+val+'，本局不下注');
@@ -759,7 +771,7 @@ function findRandomBtn(){
     var aria=(el.getAttribute('aria-label')||'').toLowerCase();
     for(var k=0;k<keywords.length;k++){
       var kw=keywords[k].toLowerCase();
-      if(txt.includes(kw)||title.includes(kw)||aria.includes(kw)){
+      if((txt.length<=20&&txt.includes(kw))||title.includes(kw)||aria.includes(kw)){
         return el;
       }
     }
@@ -786,6 +798,19 @@ function clickBetButton(){
     throw new Error('找不到投注按鈕');
   }
   tapElement(btn);
+}
+
+/* 投注沒開局時，讀頁面上的提示訊息當作原因 */
+function findToastText(){
+  var els=safeQueryAll('[role="alert"],[role="status"],[class*="toast"],[class*="Toast"],[class*="notice"],[class*="snack"]');
+  for(var i=els.length-1;i>=0;i--){
+    var el=els[i];
+    if(el.closest('#__mines_panel')||el.closest('#__mines_fab'))continue;
+    if(!el.offsetWidth&&!el.offsetHeight)continue;
+    var t=(el.textContent||'').trim().replace(/\s+/g,' ');
+    if(t&&t.length<120)return t.slice(0,80);
+  }
+  return '';
 }
 
 function findCashoutButton(){
@@ -950,17 +975,22 @@ async function run(){
   addLog('checkReady 通過，準備啟動...','a');
 
   ST.running=true;ST.stop=false;
+  /* 每次啟動拿新編號；停止會讓編號失效，舊迴圈醒來後就會結束，不會跟新迴圈同時跑 */
+  var gen=++RUN_GEN;
+  function alive(){return gen===RUN_GEN&&!ST.stop}
   ST.bet=C.baseBet;ST.lossStreak=0;
-  ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.betFails=0;
+  ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.betFails=0;ST.errStreak=0;
   ST.initBal=getBalance();
 
   document.getElementById('__btn_start').style.display='none';
-  document.getElementById('__btn_stop').style.display='';
+  var sb=document.getElementById('__btn_stop');
+  sb.style.display='';sb.disabled=false;sb.textContent='停止';
 
   addLog('=== 策略啟動 ===','a');
   addLog('底注:'+C.baseBet+' 地雷:'+C.mines+' 開格:'+C.picks,'a');
 
-  while(ST.running&&!ST.stop&&ST.rounds<C.maxRounds){
+  try{
+  while(alive()&&ST.rounds<C.maxRounds){
     ST.rounds++;
     try{
       if(!checkStillOnPage()){
@@ -969,29 +999,34 @@ async function run(){
       }
 
       addLog('['+ST.rounds+'] 下注 '+ST.bet.toFixed(6),'a');
-      await setBet(ST.bet);
+      await setBet(ST.bet,alive);
       await wait(300);
+      if(!alive())break;
 
       var betInp=safeQuery(S.betInput);
       clickBetButton();
       addLog('  已點投注 (金額:'+((betInp&&betInp.value)||'?')+')','a');
-      await wait(C.delayAfterBet);
+      /* 提示訊息通常幾秒就消失，點完立刻開始記錄 */
+      var why='';
+      for(var dw=0;dw<C.delayAfterBet;dw+=300){await wait(300);why=findToastText()||why}
 
       if(!checkStillOnPage()){
         addLog('點擊後被導航離開，自動停止','l');
         break;
       }
 
-      /* 沒開局就不能算輸，否則會依假的連輸一路加注 */
+      /* 沒開局就不能算輸，否則會依假的連輸一路加注。
+         已經點了投注，就算按了停止也要確認完，免得丟下進行中的牌局 */
       var started=false;
-      for(var sw=0;sw<10&&!ST.stop;sw++){
+      for(var sw=0;sw<15;sw++){
         if(findRandomBtn()||findCashoutButton()){started=true;break}
+        why=findToastText()||why;
         await wait(300);
       }
       if(!started){
-        ST.betFails=(ST.betFails||0)+1;
+        ST.betFails++;
         ST.rounds--;
-        addLog('  投注沒有生效（遊戲沒開局），不計輸贏，同金額重試 '+ST.betFails+'/3','r');
+        addLog('  投注沒有生效（遊戲沒開局），不計輸贏'+(why?'，頁面訊息：「'+why+'」':'')+'，同金額重試 '+ST.betFails+'/3','r');
         if(ST.betFails>=3){
           addLog('連續 3 次投注沒生效，自動停止','l');
           break;
@@ -1000,6 +1035,7 @@ async function run(){
         continue;
       }
       ST.betFails=0;
+      ST.errStreak=0;
 
       /* ===== 開格階段 ===== */
       var busted=false;
@@ -1078,20 +1114,25 @@ async function run(){
       await wait(C.delayRound);
 
     }catch(err){
+      if(!alive())break;
       addLog('錯誤: '+err.message,'l');
-      await wait(5000);
+      ST.errStreak++;
+      if(err.fatal){addLog('自動停止','l');break}
+      if(ST.errStreak>=3){addLog('連續 3 次錯誤，自動停止','l');break}
+      for(var k=0;k<25&&alive();k++)await wait(200);
     }
   }
-
+  }finally{
   ST.running=false;
   document.getElementById('__btn_start').style.display='';
-  document.getElementById('__btn_stop').style.display='none';
+  sb.style.display='none';sb.disabled=false;sb.textContent='停止';
 
   var total=ST.wins+ST.losses;
   addLog('=== 結算 ===','a');
   addLog('共'+total+'局 勝'+ST.wins+' 負'+ST.losses+' 勝率'+(total?(ST.wins/total*100).toFixed(1):0)+'%','a');
   addLog('重置'+ST.resets+'次','a');
   updateFab();
+  }
 }
 
 /* ============ 按鈕事件 ============ */
@@ -1143,10 +1184,12 @@ document.getElementById('__diag_copy').addEventListener('click',function(){
   if(navigator.clipboard)navigator.clipboard.writeText(ta.value).then(done,fb);else fb();
 });
 document.getElementById('__btn_stop').addEventListener('click',function(){
-  ST.stop=true;ST.running=false;
-  document.getElementById('__btn_start').style.display='';
-  document.getElementById('__btn_stop').style.display='none';
-  addLog('已手動停止','r');
+  if(!ST.running||ST.stop)return;
+  ST.stop=true;
+  RUN_GEN++;
+  this.disabled=true;
+  this.textContent='停止中…';
+  addLog('已手動停止（等目前這局處理完）','r');
   updateUI();
 });
 
