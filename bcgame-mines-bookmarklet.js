@@ -238,6 +238,9 @@ document.getElementById('__btn_savecfg').addEventListener('click',function(){
   C.delayRound=parseInt(document.getElementById('__c_delay').value)||2500;
   ST.bet=C.baseBet;
   addLog('參數已更新','a');
+  var btn=document.getElementById('__btn_savecfg');
+  btn.textContent='已儲存 ✓';btn.style.background='#4ade80';btn.style.color='#0c0e14';
+  setTimeout(function(){btn.textContent='儲存參數';btn.style.background='#2a2e3d';btn.style.color='#e2e4ea';},1500);
 });
 
 /* ============ 選擇器 UI ============ */
@@ -516,14 +519,17 @@ function setBet(amount){
   if(!inp)throw new Error('找不到下注輸入框');
   var val=amount.toFixed(4);
   inp.focus();
-  var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
-  /* 關鍵：清除 React 的 _valueTracker，否則 React 偵測不到值變更會重置回舊值 */
-  var tracker=inp._valueTracker;
-  if(tracker){tracker.setValue('')}
-  setter.call(inp,val);
-  inp.dispatchEvent(new Event('input',{bubbles:true}));
-  inp.dispatchEvent(new Event('change',{bubbles:true}));
-  addLog('  輸入框設為: '+val,'a');
+  inp.setSelectionRange(0,inp.value.length);
+  document.execCommand('insertText',false,val);
+  if(inp.value!==val){
+    var setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
+    var tracker=inp._valueTracker;
+    if(tracker){tracker.setValue('')}
+    setter.call(inp,val);
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  addLog('  輸入框設為: '+val+' (實際: '+inp.value+')','a');
 }
 
 /* 按文字內容找按鈕 — 比 CSS 選擇器可靠得多 */
