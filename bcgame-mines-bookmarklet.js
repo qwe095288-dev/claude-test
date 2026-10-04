@@ -10,7 +10,7 @@ if(window.__MINES_BOT){
 
 /* ============ 策略參數 ============ */
 var C={
-  baseBet:3.5,
+  baseBet:0.1,
   mines:4,
   picks:2,
   multiOnLoss:3,
@@ -20,6 +20,12 @@ var C={
   delayClick:800,
   delayAfterBet:1500
 };
+
+/* 上次儲存的參數 */
+try{
+  var savedCfg=JSON.parse(localStorage.getItem('__mines_bot_cfg')||'null');
+  if(savedCfg)for(var ck in savedCfg)if(ck in C&&typeof savedCfg[ck]==='number')C[ck]=savedCfg[ck];
+}catch(e){}
 
 /* ============ 選擇器 ============ */
 var S={betInput:'',betButton:'',cashoutButton:'',tiles:'',balance:''};
@@ -160,7 +166,18 @@ panel.innerHTML=`
       <div class="mp-stat"><small>重置</small><span id="__s_resets" style="color:#fbbf24">0</span></div>
       <div class="mp-stat"><small>餘額</small><span id="__s_bal">—</span></div>
     </div>
-    <button class="mp-btn mp-btn-go" id="__btn_start">開始策略</button>
+    <div id="__semi_box" style="display:none;background:#1a1d2a;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <small style="display:block;font-size:10px;color:#8b8fa3">下一注（Bot 已填好，你直接按投注）</small>
+      <div id="__semi_next" style="font-size:22px;font-weight:700;color:#4ade80;font-variant-numeric:tabular-nums">—</div>
+      <div id="__semi_state" style="font-size:11px;color:#8b8fa3;margin-top:2px">等待開局</div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="mp-btn mp-btn-sec" id="__semi_win" style="margin:0;padding:6px 2px;font-size:11px">上局改判贏</button>
+        <button class="mp-btn mp-btn-sec" id="__semi_lose" style="margin:0;padding:6px 2px;font-size:11px">上局改判輸</button>
+        <button class="mp-btn mp-btn-sec" id="__semi_reset" style="margin:0;padding:6px 2px;font-size:11px">重置底注</button>
+      </div>
+    </div>
+    <button class="mp-btn mp-btn-go" id="__btn_semi">半自動輔助（推薦）</button>
+    <button class="mp-btn mp-btn-sec" id="__btn_start">全自動（實驗）</button>
     <button class="mp-btn mp-btn-stop" id="__btn_stop" style="display:none">停止</button>
     <div id="__sel_warn" style="display:none;background:#3b2a1a;color:#fbbf24;padding:8px;border-radius:6px;font-size:12px;margin-top:6px">
       請先到「選擇器」頁籤設定頁面元素
@@ -362,6 +379,7 @@ document.getElementById('__btn_savecfg').addEventListener('click',function(){
   C.maxRounds=parseInt(document.getElementById('__c_maxr').value)||500;
   C.delayRound=parseInt(document.getElementById('__c_delay').value)||2500;
   if(!ST.running)ST.bet=C.baseBet;
+  try{localStorage.setItem('__mines_bot_cfg',JSON.stringify(C))}catch(e){}
   addLog(ST.running?'參數已更新（底注在下次贏或重置時生效）':'參數已更新','a');
   var btn=document.getElementById('__btn_savecfg');
   btn.textContent='已儲存 ✓';btn.style.background='#4ade80';btn.style.color='#0c0e14';
@@ -585,15 +603,28 @@ function safeQueryAll(sel){
 /* ============ 檢查就緒 ============ */
 function checkReady(){
   var ready=S.betInput&&S.tiles;
-  document.getElementById('__sel_warn').style.display=ready?'none':'block';
-  if(!ready){
-    document.getElementById('__sel_warn').textContent='請先到「選擇器」頁籤設定頁面元素';
+  var semiOk=!!S.betInput;
+  document.getElementById('__sel_warn').style.display=semiOk?'none':'block';
+  if(!semiOk){
+    document.getElementById('__sel_warn').textContent='請先到「選擇器」頁籤按「自動偵測」';
   }
   document.getElementById('__btn_start').disabled=!ready;
   document.getElementById('__btn_start').style.opacity=ready?'1':'0.4';
+  document.getElementById('__btn_semi').disabled=!semiOk;
+  document.getElementById('__btn_semi').style.opacity=semiOk?'1':'0.4';
   return ready;
 }
 checkReady();
+
+function fmtBet(x){return String(parseFloat(x.toFixed(4)))}
+function setRunUI(on){
+  document.getElementById('__btn_start').style.display=on?'none':'';
+  document.getElementById('__btn_semi').style.display=on?'none':'';
+  var sb=document.getElementById('__btn_stop');
+  sb.style.display=on?'':'none';
+  sb.disabled=false;
+  sb.textContent='停止';
+}
 
 /* ============ 更新統計 UI ============ */
 function updateUI(){
@@ -602,7 +633,8 @@ function updateUI(){
   document.getElementById('__s_wins').textContent=ST.wins;
   document.getElementById('__s_losses').textContent=ST.losses;
   document.getElementById('__s_wr').textContent=total?(ST.wins/total*100).toFixed(1)+'%':'—';
-  document.getElementById('__s_bet').textContent=ST.bet.toFixed(6);
+  document.getElementById('__s_bet').textContent=fmtBet(ST.bet);
+  document.getElementById('__semi_next').textContent=fmtBet(ST.bet)+(ST.lossStreak?'（連輸 '+ST.lossStreak+'）':'');
   document.getElementById('__s_streak').textContent=ST.lossStreak;
   document.getElementById('__s_resets').textContent=ST.resets;
   var bal=getBalance();
@@ -989,9 +1021,7 @@ async function run(){
   ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.betFails=0;ST.errStreak=0;
   ST.initBal=getBalance();
 
-  document.getElementById('__btn_start').style.display='none';
-  var sb=document.getElementById('__btn_stop');
-  sb.style.display='';sb.disabled=false;sb.textContent='停止';
+  setRunUI(true);
 
   addLog('=== 策略啟動 ===','a');
   addLog('底注:'+C.baseBet+' 地雷:'+C.mines+' 開格:'+C.picks,'a');
@@ -1131,8 +1161,7 @@ async function run(){
   }
   }finally{
   ST.running=false;
-  document.getElementById('__btn_start').style.display='';
-  sb.style.display='none';sb.disabled=false;sb.textContent='停止';
+  setRunUI(false);
 
   var total=ST.wins+ST.losses;
   addLog('=== 結算 ===','a');
@@ -1142,7 +1171,145 @@ async function run(){
   }
 }
 
+/* ============ 半自動輔助 ============
+   BC Game 不接受程式點擊的真錢投注，所以投注、開格、兌現由使用者自己按；
+   Bot 只看牌局開始/結束判斷輸贏，並自動填好下一注 */
+var SEMI={cashoutAt:0,betClickVal:null,refill:false};
+
+function gameActive(){return !!(findRandomBtn()||findCashoutButton())}
+function setSemiState(t){document.getElementById('__semi_state').textContent=t}
+
+function semiClick(e){
+  if(!e.isTrusted)return;
+  var b=e.target&&e.target.closest?e.target.closest('button,[role="button"]'):null;
+  if(!b||b.closest('#__mines_panel')||b.closest('#__mines_fab'))return;
+  var t=(b.textContent||'').trim();
+  if(/兌現|提現|cash ?out/i.test(t))SEMI.cashoutAt=Date.now();
+  else if(/^(投注|下注|bet)$/i.test(t)){var i=safeQuery(S.betInput);SEMI.betClickVal=i?i.value:null}
+}
+
+function applyResult(win){
+  ST.prev={bet:ST.bet,lossStreak:ST.lossStreak,wins:ST.wins,losses:ST.losses,resets:ST.resets,win:win};
+  if(win){
+    ST.wins++;
+    ST.lossStreak=0;
+    ST.bet=C.baseBet;
+    addLog('['+ST.rounds+'] 贏了 → 下一注回到底注 '+fmtBet(ST.bet),'w');
+    return;
+  }
+  ST.losses++;
+  ST.lossStreak++;
+  if(ST.lossStreak>=C.maxLossStreak){
+    ST.resets++;
+    ST.lossStreak=0;
+    ST.bet=C.baseBet;
+    addLog('['+ST.rounds+'] 輸了，已連輸 '+C.maxLossStreak+' 把 → 重置為底注 '+fmtBet(ST.bet),'l');
+  }else{
+    ST.bet=C.baseBet*Math.pow(C.multiOnLoss,ST.lossStreak);
+    addLog('['+ST.rounds+'] 輸了（連輸 '+ST.lossStreak+'）→ 下一注 '+fmtBet(ST.bet),'l');
+  }
+}
+
+function overrideLast(win){
+  var p=ST.prev;
+  if(!p){addLog('還沒有上一局可以改判','r');return}
+  if(p.win===win){addLog('上一局本來就判定為'+(win?'贏':'輸'),'r');return}
+  ST.bet=p.bet;ST.lossStreak=p.lossStreak;ST.wins=p.wins;ST.losses=p.losses;ST.resets=p.resets;
+  addLog('上一局改判為'+(win?'贏':'輸'),'a');
+  applyResult(win);
+  updateUI();
+  if(ST.running)setSemiState('重新填入中…');
+  SEMI.refill=true;
+}
+
+async function semiFill(alive){
+  for(var a=1;a<=3&&alive();a++){
+    try{
+      await setBet(ST.bet,alive);
+      SEMI.refill=false;
+      setSemiState('已填好，請按投注');
+      return;
+    }catch(e){
+      if(!alive())return;
+      if(e.fatal)throw e;
+      addLog('  填入失敗: '+e.message,'r');
+      for(var k=0;k<5&&alive();k++)await wait(200);
+    }
+  }
+  SEMI.refill=false;
+  setSemiState('自動填入失敗，請手動輸入 '+fmtBet(ST.bet));
+}
+
+async function semiRun(){
+  if(ST.running){addLog('已在運行中','r');return}
+  if(!S.betInput){addLog('請先到「選擇器」頁籤按自動偵測','l');return}
+  ST.running=true;ST.stop=false;
+  var gen=++RUN_GEN;
+  function alive(){return gen===RUN_GEN&&!ST.stop}
+  ST.bet=C.baseBet;ST.lossStreak=0;ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.prev=null;
+  SEMI.cashoutAt=0;SEMI.betClickVal=null;SEMI.refill=false;
+  setRunUI(true);
+  document.getElementById('__semi_box').style.display='';
+  updateUI();
+  addLog('=== 半自動輔助啟動 ===','a');
+  addLog('你按投注、開格、兌現；Bot 依輸贏自動填下一注','a');
+  addLog('底注:'+fmtBet(C.baseBet)+' 輸了×'+C.multiOnLoss+'，連輸 '+C.maxLossStreak+' 把重置','a');
+  document.addEventListener('click',semiClick,true);
+  try{
+    var active=gameActive(),onN=0,offN=0,skipFirst=active;
+    if(active)setSemiState('有進行中的牌局，結束後開始計算');
+    else await semiFill(alive);
+    while(alive()){
+      await wait(250);
+      if(gameActive()){onN++;offN=0}else{offN++;onN=0}
+      if(!active&&onN>=1){
+        active=true;
+        ST.rounds++;
+        var bi=safeQuery(S.betInput);
+        var placed=SEMI.betClickVal!==null?SEMI.betClickVal:(bi?bi.value:'?');
+        SEMI.betClickVal=null;
+        addLog('['+ST.rounds+'] 開局，下注 '+placed,'a');
+        var pv=parseFloat(placed);
+        if(!isNaN(pv)&&Math.abs(pv-ST.bet)>Math.max(0.02,ST.bet*0.01))addLog('  注意：實際下注 '+placed+' 和策略的 '+fmtBet(ST.bet)+' 不同','r');
+        setSemiState('牌局進行中…（兌現 = 贏，踩雷 = 輸）');
+      }else if(active&&offN>=2){
+        active=false;
+        var win=Date.now()-SEMI.cashoutAt<4000;
+        SEMI.cashoutAt=0;
+        if(skipFirst){skipFirst=false;await semiFill(alive);continue}
+        applyResult(win);
+        updateUI();
+        for(var k=0;k<3&&alive();k++)await wait(200);
+        if(alive())await semiFill(alive);
+      }else if(!active&&SEMI.refill){
+        await semiFill(alive);
+      }
+    }
+  }catch(err){
+    addLog('錯誤: '+err.message,'l');
+    addLog('自動停止','l');
+  }finally{
+    document.removeEventListener('click',semiClick,true);
+    ST.running=false;
+    setRunUI(false);
+    setSemiState('已停止');
+    var total=ST.wins+ST.losses;
+    addLog('=== 結算 === 共'+total+'局 勝'+ST.wins+' 負'+ST.losses+' 重置'+ST.resets+'次','a');
+    updateFab();
+  }
+}
+
 /* ============ 按鈕事件 ============ */
+document.getElementById('__btn_semi').addEventListener('click',function(){semiRun()});
+document.getElementById('__semi_win').addEventListener('click',function(){overrideLast(true)});
+document.getElementById('__semi_lose').addEventListener('click',function(){overrideLast(false)});
+document.getElementById('__semi_reset').addEventListener('click',function(){
+  ST.bet=C.baseBet;ST.lossStreak=0;ST.prev=null;
+  addLog('已重置為底注 '+fmtBet(ST.bet),'a');
+  updateUI();
+  if(ST.running)setSemiState('重新填入中…');
+  SEMI.refill=true;
+});
 document.getElementById('__btn_start').addEventListener('click',function(){run()});
 
 document.getElementById('__diag_rec').addEventListener('click',function(){

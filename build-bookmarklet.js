@@ -82,8 +82,9 @@ h1{font-size:24px;color:var(--green);margin-bottom:8px;text-align:center}
 <ol class="steps">
 <li>打開 <strong>BC Game 踩地雷</strong>頁面</li>
 <li>點擊書籤列上的 <strong>「踩地雷 Bot」</strong></li>
-<li>點「<strong>自動偵測</strong>」或手動選取頁面元素</li>
-<li>設定參數後按「<strong>開始策略</strong>」</li>
+<li>到「選擇器」頁按「<strong>自動偵測</strong>」</li>
+<li>到「參數」頁設定底注後按「儲存參數」（下次會記住）</li>
+<li>按「<strong>半自動輔助</strong>」：你自己按投注、開格、兌現，Bot 會依輸贏自動填好下一注</li>
 <li>點「<strong>—</strong>」可縮小成浮動圓形按鈕</li>
 </ol>
 </div>
