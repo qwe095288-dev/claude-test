@@ -51,13 +51,12 @@ panel.innerHTML=`
   border-radius:12px;font-family:-apple-system,sans-serif;
   font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,.5);
   display:flex;flex-direction:column;overflow:hidden;
-  touch-action:none;
 }
 #__mines_panel *{box-sizing:border-box;margin:0;padding:0}
 #__mines_panel .mp-head{
   display:flex;align-items:center;justify-content:space-between;
   padding:10px 14px;background:#1a1d2a;cursor:move;
-  border-bottom:1px solid #2a2e3d;flex-shrink:0;
+  border-bottom:1px solid #2a2e3d;flex-shrink:0;touch-action:none;
 }
 #__mines_panel .mp-head b{font-size:14px;color:#4ade80}
 #__mines_panel .mp-close{
@@ -132,6 +131,10 @@ panel.innerHTML=`
   font-size:9px;background:#1a1d2a;color:#8b8fa3;
   padding:1px 4px;border-radius:8px;border:1px solid #2a2e3d;
   white-space:nowrap;
+}
+@media (pointer:coarse){
+  #__mines_panel{bottom:96px}
+  #__mines_fab{bottom:96px}
 }
 </style>
 
@@ -237,8 +240,7 @@ function updateFab(){
     dot.style.background='#4ade80';
     dot.style.animation='none';
     dot.style.boxShadow='0 0 6px #4ade80';
-    var total=ST.wins+ST.losses;
-    cnt.textContent='W'+ST.wins+'/L'+ST.losses;
+    cnt.textContent=ST.mode==='semi'?'下注 '+fmtBet(ST.bet):'W'+ST.wins+'/L'+ST.losses;
     cnt.style.display='';
   }else{
     dot.style.background='#8b8fa3';
@@ -247,10 +249,11 @@ function updateFab(){
   }
 }
 
-fab.addEventListener('click',function(){
+function showPanel(){
   fab.style.display='none';
   panel.style.display='flex';
-});
+}
+fab.addEventListener('click',showPanel);
 
 /* ============ Tab 切換 ============ */
 var tabs=panel.querySelectorAll('.mp-tab');
@@ -271,6 +274,7 @@ tabs.forEach(function(t,i){
   var head=document.getElementById('__mp_head');
   var startX,startY,origX,origY,dragging=false;
   function onStart(e){
+    if(e.target.closest&&e.target.closest('button'))return;
     dragging=true;
     var ev=e.touches?e.touches[0]:e;
     startX=ev.clientX;startY=ev.clientY;
@@ -316,6 +320,7 @@ tabs.forEach(function(t,i){
     fab.style.right='auto';fab.style.bottom='auto';
   }
   function onEnd(e){
+    if(dragging&&!moved&&e.type==='touchend')showPanel();
     if(dragging&&moved){
       e.preventDefault();e.stopPropagation();
       /* 防止觸發 click */
@@ -473,7 +478,17 @@ document.getElementById('__btn_auto').addEventListener('click',function(){
   addLog('開始自動偵測...','a');
 
   var inputs=document.querySelectorAll('input');
-  for(var i=0;i<inputs.length;i++){
+  /* BC Game 的金額框是 inputmode=decimal；手機版版面不同，不能假設它是第一個 input */
+  var decInp=null;
+  for(var di=0;di<inputs.length;di++){
+    if(inputs[di].closest('#__mines_panel')||inputs[di].offsetParent===null)continue;
+    if(inputs[di].getAttribute('inputmode')==='decimal'){decInp=inputs[di];break}
+  }
+  if(decInp){
+    S.betInput=genSel(decInp);
+    addLog('下注輸入框 → '+S.betInput,'a');
+  }
+  for(var i=0;i<inputs.length&&!decInp;i++){
     var inp=inputs[i];
     if(inp.closest('#__mines_panel'))continue;
     var ph=(inp.placeholder||'').toLowerCase();
@@ -588,9 +603,18 @@ function genSel(el){
   if(el.id)return'#'+CSS.escape(el.id);
   if(el.getAttribute('data-testid'))return'[data-testid="'+el.getAttribute('data-testid')+'"]';
   var tag=el.tagName.toLowerCase();
-  var cls=el.className&&typeof el.className==='string'?
+  var cls=el.className&&typeof el.className==='string'&&el.className.trim()?
     '.'+el.className.trim().split(/\s+/).slice(0,2).map(function(c){return CSS.escape(c)}).join('.'):'';
-  return tag+cls;
+  var sel=tag+cls;
+  if(safeQuery(sel)===el)return sel;
+  var attrs=['inputmode','name','type','placeholder','aria-label'];
+  for(var a=0;a<attrs.length;a++){
+    var v=el.getAttribute(attrs[a]);
+    if(!v)continue;
+    var s2=sel+'['+attrs[a]+'="'+v.replace(/"/g,'\\"')+'"]';
+    if(safeQuery(s2)===el)return s2;
+  }
+  return sel;
 }
 
 function safeQuery(sel){
@@ -709,12 +733,26 @@ async function setBet(amount,alive){
 
     inp.focus();
     await wait(50);
-    inp.select();
-    document.execCommand('selectAll',false,null);
-    document.execCommand('insertText',false,val);
-    await wait(100);
-    /* 真人點投注時輸入框會先失焦觸發 change，BC Game 這時才存金額；合成 click 不會移動焦點 */
-    getInp().blur();
+    var typed=false;
+    if(document.activeElement===inp){
+      inp.select();
+      document.execCommand('selectAll',false,null);
+      typed=document.execCommand('insertText',false,val)&&getInp().value===val;
+    }
+    var how='';
+    if(typed){
+      await wait(100);
+      /* 真人點投注時輸入框會先失焦觸發 change，BC Game 這時才存金額；合成 click 不會移動焦點 */
+      getInp().blur();
+    }else{
+      /* iOS Safari 常不允許程式聚焦輸入框，改成直接寫值並送出 input/change 讓 BC Game 存入 */
+      var i1=getInp();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i1,val);
+      i1.dispatchEvent(new Event('input',{bubbles:true}));
+      i1.dispatchEvent(new Event('change',{bubbles:true}));
+      if(document.activeElement===i1)i1.blur();
+      how=' [直接寫入]';
+    }
 
     /* 等數值與 ≈USDC 提示穩定（兩趟換算約 120ms） */
     var last='',same=0;
@@ -734,7 +772,7 @@ async function setBet(amount,alive){
     var tol=ST.rate?0.0004*ST.rate+0.001:Math.max(0.02,amount*0.005);
     var diff=amount-actual;
     if(actual>0&&diff>=-0.0002&&diff<=tol&&document.activeElement!==i3){
-      addLog('  輸入框: '+i3.value+(usdHint(i3)?' ('+usdHint(i3)+')':'')+(attempt>1?' (第'+attempt+'次成功)':''),'a');
+      addLog('  輸入框: '+i3.value+(usdHint(i3)?' ('+usdHint(i3)+')':'')+how+(attempt>1?' (第'+attempt+'次成功)':''),'a');
       return actual;
     }
     addLog('  輸入失敗 第'+attempt+'次, 實際:'+i3.value+(usdHint(i3)?' ('+usdHint(i3)+')':''),'r');
@@ -1013,7 +1051,7 @@ async function run(){
   }
   addLog('checkReady 通過，準備啟動...','a');
 
-  ST.running=true;ST.stop=false;
+  ST.running=true;ST.stop=false;ST.mode='auto';
   /* 每次啟動拿新編號；停止會讓編號失效，舊迴圈醒來後就會結束，不會跟新迴圈同時跑 */
   var gen=++RUN_GEN;
   function alive(){return gen===RUN_GEN&&!ST.stop}
@@ -1175,6 +1213,7 @@ async function run(){
    BC Game 不接受程式點擊的真錢投注，所以投注、開格、兌現由使用者自己按；
    Bot 只看牌局開始/結束判斷輸贏，並自動填好下一注 */
 var SEMI={cashoutAt:0,betClickVal:null,refill:false};
+var SEMI_EVENTS=['pointerdown','touchstart','click'];
 
 function gameActive(){return !!(findRandomBtn()||findCashoutButton())}
 function setSemiState(t){document.getElementById('__semi_state').textContent=t}
@@ -1243,7 +1282,7 @@ async function semiFill(alive){
 async function semiRun(){
   if(ST.running){addLog('已在運行中','r');return}
   if(!S.betInput){addLog('請先到「選擇器」頁籤按自動偵測','l');return}
-  ST.running=true;ST.stop=false;
+  ST.running=true;ST.stop=false;ST.mode='semi';
   var gen=++RUN_GEN;
   function alive(){return gen===RUN_GEN&&!ST.stop}
   ST.bet=C.baseBet;ST.lossStreak=0;ST.rounds=0;ST.wins=0;ST.losses=0;ST.resets=0;ST.prev=null;
@@ -1254,7 +1293,7 @@ async function semiRun(){
   addLog('=== 半自動輔助啟動 ===','a');
   addLog('你按投注、開格、兌現；Bot 依輸贏自動填下一注','a');
   addLog('底注:'+fmtBet(C.baseBet)+' 輸了×'+C.multiOnLoss+'，連輸 '+C.maxLossStreak+' 把重置','a');
-  document.addEventListener('click',semiClick,true);
+  SEMI_EVENTS.forEach(function(t){document.addEventListener(t,semiClick,true)});
   try{
     var active=gameActive(),onN=0,offN=0,skipFirst=active;
     if(active)setSemiState('有進行中的牌局，結束後開始計算');
@@ -1289,7 +1328,7 @@ async function semiRun(){
     addLog('錯誤: '+err.message,'l');
     addLog('自動停止','l');
   }finally{
-    document.removeEventListener('click',semiClick,true);
+    SEMI_EVENTS.forEach(function(t){document.removeEventListener(t,semiClick,true)});
     ST.running=false;
     setRunUI(false);
     setSemiState('已停止');

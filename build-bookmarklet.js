@@ -27,7 +27,7 @@ const html = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>踩地雷 Bot 書籤安裝</title>
+<title>踩地雷 Bot 安裝</title>
 <style>
 :root{--bg:#0c0e14;--card:#12141c;--border:#2a2e3d;--text:#e2e4ea;--sub:#8b8fa3;--green:#4ade80;--blue:#3b82f6;--yellow:#fbbf24}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -48,44 +48,57 @@ h1{font-size:24px;color:var(--green);margin-bottom:8px;text-align:center}
 .copy-btn{display:block;width:100%;padding:12px;background:var(--green);color:var(--bg);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:12px}
 .code-preview{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:ui-monospace,monospace;font-size:11px;color:var(--sub);max-height:80px;overflow:hidden;word-break:break-all;margin-top:8px}
 .meta{color:var(--sub);font-size:12px;margin-top:8px}
+.sel-btn{display:block;width:100%;padding:10px;background:var(--border);color:var(--text);border:none;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px}
+textarea#codeBox{width:100%;height:90px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:16px;color:var(--sub);resize:vertical}
 .note{background:#1a1d2a;border-left:3px solid var(--yellow);padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;color:var(--yellow)}
 </style>
 </head>
 <body>
 <div class="container">
 <h1>踩地雷 Bot</h1>
-<p class="subtitle">BC Game Mines 自動策略工具</p>
+<p class="subtitle">BC Game Mines 輔助工具（電腦 Chrome／iPhone Safari）</p>
 
+<div id="desktopCards">
 <div class="card">
-<h2><span class="num">1</span>拖曳安裝（推薦）</h2>
+<h2><span class="num">💻</span>電腦：拖曳安裝</h2>
 <div class="drag-area">
 <a class="bookmark-link" id="bmLink" href="#">踩地雷 Bot</a>
 <p class="hint">把上面的按鈕拖到書籤列即可（舊書籤請先刪除，並重新整理 BC Game 頁面）</p>
 </div>
+<ol class="steps" style="margin-top:12px">
+<li>拖不動的話：書籤列<strong>右鍵 → 新增書籤</strong>，名稱填「踩地雷 Bot」</li>
+<li>網址欄貼上下方「複製程式碼」的內容，儲存</li>
+</ol>
+</div>
+</div>
+
+<div class="card" id="iosCard">
+<h2><span class="num">📱</span>iPhone／iPad（Safari）</h2>
+<ol class="steps">
+<li>按下方「<strong>複製程式碼</strong>」</li>
+<li>在 <strong>Safari</strong> 開任何網頁（例如 google.com），點<strong>分享鈕 → 加入書籤</strong>，名稱改成「踩地雷 Bot」→ 儲存</li>
+<li>點 Safari 的<strong>書籤圖示</strong>（打開的書）→ 右下「<strong>編輯</strong>」→ 點「踩地雷 Bot」→ <strong>把網址欄清空，貼上程式碼</strong> → 完成</li>
+<li>打開 <strong>BC Game 踩地雷</strong>頁面 → 點書籤圖示 → 點「踩地雷 Bot」執行（也可以在網址列輸入「踩地雷」，從建議清單點書籤）</li>
+<li>更新版本時：先重新整理 BC Game 頁面，再執行新書籤</li>
+</ol>
 </div>
 
 <div class="card">
-<h2><span class="num">2</span>手動安裝</h2>
-<ol class="steps">
-<li>在書籤列上<strong>右鍵 → 新增書籤</strong></li>
-<li>名稱填 <strong>踩地雷 Bot</strong></li>
-<li>網址欄貼上「複製程式碼」的內容</li>
-<li>儲存書籤</li>
-</ol>
+<h2><span class="num">📋</span>程式碼</h2>
 <button class="copy-btn" id="copyBtn">複製程式碼</button>
-<div class="code-preview" id="codePreview"></div>
+<textarea id="codeBox" readonly></textarea>
+<button class="sel-btn" id="selBtn">全選文字框（複製失敗時，全選後點「拷貝」）</button>
 <p class="meta" id="codeMeta"></p>
 </div>
 
 <div class="card">
-<h2><span class="num">3</span>使用方式</h2>
+<h2><span class="num">▶</span>使用方式</h2>
 <ol class="steps">
-<li>打開 <strong>BC Game 踩地雷</strong>頁面</li>
-<li>點擊書籤列上的 <strong>「踩地雷 Bot」</strong></li>
+<li>在 BC Game 踩地雷頁面執行書籤</li>
 <li>到「選擇器」頁按「<strong>自動偵測</strong>」</li>
 <li>到「參數」頁設定底注後按「儲存參數」（下次會記住）</li>
 <li>按「<strong>半自動輔助</strong>」：你自己按投注、開格、兌現，Bot 會依輸贏自動填好下一注</li>
-<li>點「<strong>—</strong>」可縮小成浮動圓形按鈕</li>
+<li>點「<strong>—</strong>」縮小成圓形按鈕，按鈕上會顯示下一注金額</li>
 </ol>
 </div>
 
@@ -94,34 +107,44 @@ h1{font-size:24px;color:var(--green);margin-bottom:8px;text-align:center}
 
 <script>
 var code=__CODE__;
-document.getElementById('bmLink').setAttribute('href',code);
-document.getElementById('codePreview').textContent=code.substring(0,300)+'...';
-document.getElementById('codeMeta').textContent='程式碼長度：'+code.length+' 字元';
-function copied(){
-  var b=document.getElementById('copyBtn');
-  b.textContent='已複製 ✓';
-  setTimeout(function(){b.textContent='複製程式碼'},2000);
+var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(isIOS){
+  var c=document.querySelector('.container');
+  c.insertBefore(document.getElementById('iosCard'),document.getElementById('desktopCards'));
 }
+document.getElementById('bmLink').setAttribute('href',code);
+var box=document.getElementById('codeBox');
+box.value=code;
+document.getElementById('codeMeta').textContent='版本 __VER__ ｜ 程式碼長度：'+code.length+' 字元';
+function selectBox(){
+  box.focus();
+  box.setSelectionRange(0,box.value.length);
+}
+document.getElementById('selBtn').addEventListener('click',selectBox);
 document.getElementById('copyBtn').addEventListener('click',function(){
-  if(navigator.clipboard){
-    navigator.clipboard.writeText(code).then(copied,fallback);
-  }else{
-    fallback();
-  }
-  function fallback(){
+  var b=this;
+  function ok(){b.textContent='已複製 ✓';setTimeout(function(){b.textContent='複製程式碼'},2000)}
+  function manual(){b.textContent='自動複製失敗：請按下方「全選文字框」再點「拷貝」';selectBox()}
+  function legacy(){
     var ta=document.createElement('textarea');
     ta.value=code;
+    ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';
     document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
+    ta.focus();
+    ta.setSelectionRange(0,code.length);
+    var done=false;
+    try{done=document.execCommand('copy')}catch(e){}
     ta.remove();
-    copied();
+    if(done)ok();else manual();
   }
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(code).then(ok,legacy);
+  else legacy();
 });
 </script>
 </body>
 </html>
-`.replace('__CODE__', () => embedded);
+`.replace('__CODE__', () => embedded).replace('__VER__', ver);
 
 fs.writeFileSync(path.join(dir, 'bcgame-mines-install.html'), html);
 console.log('version:', ver);
