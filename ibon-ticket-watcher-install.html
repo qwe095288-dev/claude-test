@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ibon 釋票提醒 安裝</title>
+<style>
+:root{--bg:#0c0e14;--card:#12141c;--border:#2a2e3d;--text:#e2e4ea;--sub:#8b8fa3;--pink:#f472b6;--blue:#3b82f6;--yellow:#fbbf24}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding:24px 16px}
+.container{max-width:560px;margin:0 auto}
+h1{font-size:24px;color:var(--pink);margin-bottom:8px;text-align:center}
+.subtitle{color:var(--sub);text-align:center;margin-bottom:24px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px}
+.card h2{font-size:16px;color:var(--pink);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.num{width:28px;height:28px;background:var(--pink);color:var(--bg);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.drag-area{text-align:center;padding:20px;border:2px dashed var(--border);border-radius:10px}
+.bookmark-link{display:inline-block;padding:14px 28px;background:var(--blue);color:#fff;font-size:16px;font-weight:600;border-radius:10px;text-decoration:none;cursor:grab;white-space:nowrap}
+.hint{color:var(--sub);font-size:12px;margin-top:12px}
+.steps{list-style:none;counter-reset:step}
+.steps li{position:relative;padding:8px 0 8px 32px;color:var(--sub);font-size:14px;line-height:1.5}
+.steps li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:8px;width:22px;height:22px;background:var(--border);color:var(--text);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.steps li strong{color:var(--text)}
+.copy-btn{display:block;width:100%;padding:12px;background:var(--pink);color:var(--bg);border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.sel-btn{display:block;width:100%;padding:10px;background:var(--border);color:var(--text);border:none;border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px}
+textarea#codeBox{width:100%;height:90px;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:16px;color:var(--sub);resize:vertical}
+.meta{color:var(--sub);font-size:12px;margin-top:8px}
+.note{background:#1a1d2a;border-left:3px solid var(--yellow);padding:12px 16px;border-radius:0 8px 8px 0;font-size:13px;color:var(--yellow);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>ibon 釋票提醒</h1>
+<p class="subtitle">只監看頁面、有票時發聲提醒，不會自動購買</p>
+
+<div id="iosCard" class="card">
+<h2><span class="num">📱</span>iPhone／iPad（Safari）</h2>
+<ol class="steps">
+<li>按下方「<strong>複製程式碼</strong>」</li>
+<li>在 <strong>Safari</strong> 開任何網頁，點<strong>分享鈕 → 加入書籤</strong>，名稱改成「釋票提醒」→ 儲存</li>
+<li>點書籤圖示 → 右下「<strong>編輯</strong>」→ 點「釋票提醒」→ <strong>把網址欄清空，貼上程式碼</strong> → 完成</li>
+<li>打開要搶的 <strong>ibon 票區頁面</strong>（選到「座位/數量」那一步）→ 點書籤圖示 → 點「釋票提醒」</li>
+</ol>
+</div>
+
+<div id="desktopCards">
+<div class="card">
+<h2><span class="num">💻</span>電腦：拖曳安裝</h2>
+<div class="drag-area">
+<a class="bookmark-link" id="bmLink" href="#">釋票提醒</a>
+<p class="hint">把按鈕拖到書籤列即可（更新時先刪舊書籤、重新整理頁面）</p>
+</div>
+<ol class="steps" style="margin-top:12px">
+<li>拖不動的話：書籤列<strong>右鍵 → 新增書籤</strong>，網址貼上下方程式碼</li>
+</ol>
+</div>
+</div>
+
+<div class="card">
+<h2><span class="num">📋</span>程式碼</h2>
+<button class="copy-btn" id="copyBtn">複製程式碼</button>
+<textarea id="codeBox" readonly></textarea>
+<button class="sel-btn" id="selBtn">全選文字框（複製失敗時，全選後點「拷貝」）</button>
+<p class="meta" id="codeMeta"></p>
+</div>
+
+<div class="card">
+<h2><span class="num">▶</span>使用方式</h2>
+<ol class="steps">
+<li>先登入 ibon，進到你要搶的<strong>票區頁面</strong>（售完的那一步）</li>
+<li>執行書籤 → 設定每幾秒檢查（建議 10 秒以上）→ 按「<strong>開始監看</strong>」</li>
+<li>它會在背景重新讀取頁面。偵測到有票 → <strong>響鈴＋橫幅＋標題閃爍＋震動</strong>，然後停下來</li>
+<li>聽到提醒後，<strong>自己手動</strong>選張數、填資料、過驗證碼、付款</li>
+<li>分頁要保持開著且維持登入；逾時或跳轉時工具會提示你重新進入</li>
+</ol>
+</div>
+
+<div class="note">
+此工具只會像你按重新整理一樣監看頁面，<strong>不會自動選票、送出、過驗證碼或購買</strong>。<br>
+依《文化創意產業發展法》，用電腦程式購買藝文票券屬違法；請僅將本工具用於「提醒」，實際購票一律自己手動完成。<br>
+檢查間隔請勿設太短，以免造成伺服器負擔或觸發防護機制。
+</div>
+</div>
+
+<script>
+var code="javascript:void(function(){ var VER='5034499a'; if(window.__IBON_WATCH){ if(window.__IBON_WATCH.ver===VER){window.__IBON_WATCH.toggle();return} alert('頁面上還有舊版的釋票提醒工具。\\n請先重新整理（F5）頁面，再點一次書籤。'); return; } var LS='__ibon_watch_cfg'; var C={interval:10,sound:true}; try{ var saved=JSON.parse(localStorage.getItem(LS)||'null'); if(saved){ if(typeof saved.interval==='number')C.interval=saved.interval; if(typeof saved.sound==='boolean')C.sound=saved.sound; } }catch(e){} function saveCfg(){try{localStorage.setItem(LS,JSON.stringify(C))}catch(e){}} var ST={running:false,timer:null,checks:0,fails:0,alerting:false,audio:null,titleTimer:null,origTitle:document.title}; var panel=document.createElement('div'); panel.id='__ibon_panel'; panel.innerHTML=` \u003cstyle> #__ibon_panel{ position:fixed;bottom:16px;right:12px;z-index:2147483647; width:300px;max-width:calc(100vw - 24px); background:#12141c;color:#e2e4ea;border:1px solid #2a2e3d; border-radius:12px;font-family:-apple-system,sans-serif;font-size:13px; box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden; } #__ibon_panel *{box-sizing:border-box;margin:0;padding:0} #__ibon_panel .ip-head{ display:flex;align-items:center;justify-content:space-between; padding:10px 14px;background:#1a1d2a;cursor:move;touch-action:none; } #__ibon_panel .ip-head b{font-size:14px;color:#f472b6} #__ibon_panel .ip-head div{display:flex;gap:6px} #__ibon_panel .ip-x{width:26px;height:26px;border:none;border-radius:6px;background:#2a2e3d;color:#e2e4ea;font-size:15px;cursor:pointer} #__ibon_panel .ip-body{padding:12px 14px} #__ibon_panel .ip-status{background:#1a1d2a;border-radius:8px;padding:10px;margin-bottom:10px;text-align:center} #__ibon_panel .ip-status b{font-size:16px} #__ibon_panel .ip-row{display:flex;gap:8px;align-items:center;margin-bottom:10px} #__ibon_panel .ip-row label{font-size:12px;color:#8b8fa3;white-space:nowrap} #__ibon_panel .ip-row input{width:60px;padding:6px;background:#0c0e14;border:1px solid #2a2e3d;color:#e2e4ea;border-radius:6px;font-size:13px} #__ibon_panel .ip-btn{width:100%25;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:6px} #__ibon_panel .ip-go{background:#f472b6;color:#0c0e14} #__ibon_panel .ip-stop{background:#f87171;color:#fff} #__ibon_panel .ip-ack{background:#4ade80;color:#0c0e14} #__ibon_panel .ip-log{font-family:ui-monospace,monospace;font-size:11px;line-height:1.5;max-height:140px;overflow-y:auto;background:#0c0e14;border-radius:6px;padding:8px;margin-top:8px} #__ibon_panel .ip-log .ok{color:#4ade80} #__ibon_panel .ip-log .warn{color:#fbbf24} #__ibon_banner{ position:fixed;top:0;left:0;right:0;z-index:2147483647; background:#f472b6;color:#0c0e14;font-family:-apple-system,sans-serif; font-size:20px;font-weight:800;text-align:center;padding:18px 12px; box-shadow:0 4px 20px rgba(0,0,0,.6);display:none; } \u003c/style> \u003cdiv class=\"ip-head\" id=\"__ip_head\"> \u003cb>ibon 釋票提醒\u003c/b> \u003cdiv>\u003cbutton class=\"ip-x\" id=\"__ip_mini\" title=\"縮小\">—\u003c/button>\u003cbutton class=\"ip-x\" id=\"__ip_close\">&times;\u003c/button>\u003c/div> \u003c/div> \u003cdiv class=\"ip-body\"> \u003cdiv class=\"ip-status\">狀態：\u003cb id=\"__ip_state\">待機\u003c/b>\u003c/div> \u003cdiv class=\"ip-row\"> \u003clabel>每幾秒檢查\u003c/label> \u003cinput type=\"number\" id=\"__ip_int\" min=\"5\" step=\"1\"> \u003clabel>\u003cinput type=\"checkbox\" id=\"__ip_snd\" style=\"width:auto\"> 響鈴\u003c/label> \u003c/div> \u003cbutton class=\"ip-btn ip-go\" id=\"__ip_start\">開始監看\u003c/button> \u003cbutton class=\"ip-btn ip-stop\" id=\"__ip_stopbtn\" style=\"display:none\">停止監看\u003c/button> \u003cbutton class=\"ip-btn ip-ack\" id=\"__ip_ack\" style=\"display:none\">我知道了（停止響鈴）\u003c/button> \u003cdiv class=\"ip-log\" id=\"__ip_log\">\u003c/div> \u003c/div> `; document.body.appendChild(panel); var banner=document.createElement('div'); banner.id='__ibon_banner'; document.body.appendChild(banner); var fab=document.createElement('div'); fab.id='__ibon_fab'; fab.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;width:52px;height:52px;border-radius:50%25;background:#12141c;border:2px solid #f472b6;color:#f472b6;font-size:22px;display:none;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.6)'; fab.textContent='🔔'; document.body.appendChild(fab); function $(id){return document.getElementById(id)} function log(msg,cls){ var box=$('__ip_log'); var d=document.createElement('div'); d.className=cls||''; var n=new Date(); var ts=('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2)+':'+('0'+n.getSeconds()).slice(-2); d.textContent=ts+' '+msg; box.appendChild(d); if(box.children.length>100)box.removeChild(box.firstChild); box.scrollTop=box.scrollHeight; } $('__ip_int').value=C.interval; $('__ip_snd').checked=C.sound; function beepStart(){ try{ var Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx)return; if(!ST.audio)ST.audio=new Ctx(); var ctx=ST.audio; if(ctx.state==='suspended')ctx.resume(); ST.beepTimer=setInterval(function(){ var o=ctx.createOscillator(); var g=ctx.createGain(); o.type='square'; o.frequency.value=880; g.gain.value=0.15; o.connect(g);g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.25); },500); }catch(e){} } function beepStop(){ if(ST.beepTimer){clearInterval(ST.beepTimer);ST.beepTimer=null} } function flashTitleStart(){ var on=false; ST.titleTimer=setInterval(function(){ document.title=on?ST.origTitle:'🔔 有票了！'; on=!on; },700); } function flashTitleStop(){ if(ST.titleTimer){clearInterval(ST.titleTimer);ST.titleTimer=null;document.title=ST.origTitle} } function detect(html){ try{ var doc=new DOMParser().parseFromString(html,'text/html'); var grid=doc.getElementById('ctl00_ContentPlaceHolder1_DataGrid'); if(!grid)return{ok:false,reason:'找不到售票表格（可能登入逾時或頁面已跳轉），請回頁面重新進入票區'}; var rows=grid.querySelectorAll('tbody tr'); if(!rows.length)return{ok:false,reason:'表格沒有資料列'}; var avail=false,detail=[]; for(var i=0;i\u003crows.length;i++){ var cells=rows[i].querySelectorAll('td'); var name=cells[0]?cells[0].textContent.trim():''; var action=rows[i].querySelector('td.action')||cells[cells.length-1]; var txt=action?action.textContent.trim().replace(/\\s+/g,' '):''; var sel=action?action.querySelector('select:not([disabled]),input:not([disabled])'):null; var sold=/售完|完售|無票|額滿|未開賣/.test(txt); var rowAvail=(!!sel&&!sold)||(!sold&&txt!==''&&!/^0+$/.test(txt)); if(rowAvail)avail=true; detail.push(name+'：'+(rowAvail?'可購買':(txt||'?'))); } return{ok:true,avail:avail,detail:detail.join(' ｜ ')}; }catch(e){return{ok:false,reason:'解析失敗：'+e.message}} } async function checkOnce(){ ST.checks++; var url=location.pathname+location.search; try{ var res=await fetch(url,{credentials:'include',cache:'no-store'}); if(!res.ok){ST.fails++;log('第'+ST.checks+'次：HTTP '+res.status,'warn');afterFail();return} var html=await res.text(); var d=detect(html); if(!d.ok){ST.fails++;log('第'+ST.checks+'次：'+d.reason,'warn');afterFail();return} ST.fails=0; if(d.avail){ log('第'+ST.checks+'次：有票！'+d.detail,'ok'); fire(d.detail); }else{ log('第'+ST.checks+'次：售完（'+d.detail+'）'); } }catch(e){ ST.fails++; log('第'+ST.checks+'次：連線失敗 '+e.message,'warn'); afterFail(); } } function afterFail(){ if(ST.fails>=5){ log('連續 5 次抓不到資料，暫停監看，請確認仍在票區頁面且已登入','warn'); stopWatch(); } } function fire(detail){ if(ST.alerting)return; ST.alerting=true; stopWatch(true); $('__ip_state').textContent='有票了！'; $('__ip_state').style.color='#4ade80'; $('__ip_ack').style.display=''; banner.textContent='🔔 有票了！'+detail+'　請立即手動搶購（本工具不會自動買）'; banner.style.display='block'; if(C.sound)beepStart(); flashTitleStart(); try{if('vibrate' in navigator)navigator.vibrate([400,200,400,200,600])}catch(e){} try{if(window.Notification&&Notification.permission==='granted')new Notification('ibon 有票了！',{body:detail})}catch(e){} if(panel.style.display==='none'){fab.style.display='none';panel.style.display=''} } function ackAlert(){ ST.alerting=false; beepStop(); flashTitleStop(); banner.style.display='none'; $('__ip_ack').style.display='none'; $('__ip_state').textContent='待機'; $('__ip_state').style.color=''; try{if('vibrate' in navigator)navigator.vibrate(0)}catch(e){} } function startWatch(){ if(ST.running)return; C.interval=Math.max(5,parseInt($('__ip_int').value)||10); C.sound=$('__ip_snd').checked; $('__ip_int').value=C.interval; saveCfg(); if(location.host.indexOf('ibon')===-1)log('注意：目前不在 ibon 網域，仍會嘗試監看','warn'); try{if(window.Notification&&Notification.permission==='default')Notification.requestPermission()}catch(e){} if(C.sound){try{var Ctx=window.AudioContext||window.webkitAudioContext;if(Ctx){if(!ST.audio)ST.audio=new Ctx();if(ST.audio.state==='suspended')ST.audio.resume()}}catch(e){}} ST.running=true;ST.checks=0;ST.fails=0; $('__ip_start').style.display='none'; $('__ip_stopbtn').style.display=''; $('__ip_state').textContent='監看中…'; $('__ip_state').style.color='#f472b6'; log('開始監看，每 '+C.interval+' 秒檢查一次','ok'); checkOnce(); ST.timer=setInterval(checkOnce,C.interval*1000); } function stopWatch(keepState){ if(ST.timer){clearInterval(ST.timer);ST.timer=null} ST.running=false; $('__ip_start').style.display=''; $('__ip_stopbtn').style.display='none'; if(!keepState){ $('__ip_state').textContent='待機'; $('__ip_state').style.color=''; log('已停止監看'); } } $('__ip_start').addEventListener('click',startWatch); $('__ip_stopbtn').addEventListener('click',function(){stopWatch()}); $('__ip_ack').addEventListener('click',ackAlert); $('__ip_close').addEventListener('click',function(){stopWatch();beepStop();flashTitleStop();banner.style.display='none';panel.style.display='none';fab.style.display='none'}); $('__ip_mini').addEventListener('click',function(e){e.stopPropagation();panel.style.display='none';fab.style.display='flex'}); fab.addEventListener('click',function(){fab.style.display='none';panel.style.display=''}); (function(){ var head=$('__ip_head'),sx,sy,ox,oy,drag=false; function down(e){ if(e.target.closest&&e.target.closest('button'))return; drag=true; var ev=e.touches?e.touches[0]:e; sx=ev.clientX;sy=ev.clientY; var r=panel.getBoundingClientRect();ox=r.left;oy=r.top; e.preventDefault(); } function move(e){ if(!drag)return; var ev=e.touches?e.touches[0]:e; panel.style.left=(ox+ev.clientX-sx)+'px'; panel.style.top=(oy+ev.clientY-sy)+'px'; panel.style.right='auto';panel.style.bottom='auto'; } function up(){drag=false} head.addEventListener('mousedown',down); head.addEventListener('touchstart',down,{passive:false}); document.addEventListener('mousemove',move); document.addEventListener('touchmove',move,{passive:false}); document.addEventListener('mouseup',up); document.addEventListener('touchend',up); })(); window.__IBON_WATCH={ver:VER,toggle:function(){ if(panel.style.display==='none'){fab.style.display='none';panel.style.display=''} else{panel.style.display='none';fab.style.display='flex'} }}; log('提醒工具已載入。設定秒數後按「開始監看」。'); log('只監看、不自動購買；有票後請自己搶購。'); }());";
+var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(!isIOS){
+  var c=document.querySelector('.container');
+  c.insertBefore(document.getElementById('desktopCards'),document.getElementById('iosCard'));
+}
+document.getElementById('bmLink').setAttribute('href',code);
+var box=document.getElementById('codeBox');
+box.value=code;
+document.getElementById('codeMeta').textContent='版本 5034499a ｜ 程式碼長度：'+code.length+' 字元';
+function selectBox(){box.focus();box.setSelectionRange(0,box.value.length)}
+document.getElementById('selBtn').addEventListener('click',selectBox);
+document.getElementById('copyBtn').addEventListener('click',function(){
+  var b=this;
+  function ok(){b.textContent='已複製 ✓';setTimeout(function(){b.textContent='複製程式碼'},2000)}
+  function manual(){b.textContent='自動複製失敗：請按下方「全選文字框」再拷貝';selectBox()}
+  function legacy(){
+    var ta=document.createElement('textarea');
+    ta.value=code;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0;font-size:16px';
+    document.body.appendChild(ta);ta.focus();ta.setSelectionRange(0,code.length);
+    var done=false;try{done=document.execCommand('copy')}catch(e){}
+    ta.remove();if(done)ok();else manual();
+  }
+  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(code).then(ok,legacy);
+  else legacy();
+});
+</script>
+</body>
+</html>
