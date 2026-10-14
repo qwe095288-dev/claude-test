@@ -93,43 +93,44 @@
     if (bar) bar.style.width = '100%';
   }
 
-  function openFormInIframe(url) {
-    var iframe = document.createElement('iframe');
-    iframe.id = 'quizFormFrame';
-    iframe.src = url || './complete.aspx';
-    iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;'
-      + 'z-index:99998;border:none;background:#fff;';
-    document.body.appendChild(iframe);
+  async function goToFormPage(url) {
+    var formUrl = url || './complete.aspx';
+    var sid = localStorage.getItem('quizUserID') || '';
+    if (!sid) {
+      sid = prompt('請輸入身分證字號（會記住，下次自動帶入）：');
+      if (sid && sid.trim()) {
+        sid = sid.trim().toUpperCase();
+        localStorage.setItem('quizUserID', sid);
+      } else {
+        window.location.href = formUrl;
+        return;
+      }
+    }
+    try {
+      var resp = await fetch(formUrl);
+      var html = await resp.text();
+      document.open();
+      document.write(html);
+      document.close();
+      window.history.replaceState(null, '', formUrl);
 
-    iframe.onload = function() {
-      try {
-        var idoc = iframe.contentDocument || iframe.contentWindow.document;
-        var inp = idoc.querySelector('input[placeholder*="身分證"]')
-          || idoc.querySelector('input[name*="id" i]')
-          || idoc.querySelector('input[name*="ID"]');
-        if (!inp) return;
-
-        var sid = localStorage.getItem('quizUserID') || '';
-        if (!sid) {
-          sid = prompt('請輸入身分證字號（會記住，下次自動帶入）：');
-          if (sid && sid.trim()) {
-            sid = sid.trim().toUpperCase();
-            localStorage.setItem('quizUserID', sid);
-          } else return;
+      setTimeout(function () {
+        var inp = document.querySelector('input[placeholder*="身分證"]')
+          || document.querySelector('input[name*="id" i]')
+          || document.querySelector('input[name*="ID"]');
+        if (inp) {
+          inp.value = sid;
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          inp.dispatchEvent(new Event('change', { bubbles: true }));
         }
-
-        inp.value = sid;
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-        inp.dispatchEvent(new Event('change', { bubbles: true }));
-
+        createPanel();
         panelDone('✅ 身分證已填入');
         updatePanel(9, 9, '身分證：' + sid.charAt(0) + '***' + sid.slice(-2));
         updatePanel(9, 9, '請輸入驗證碼後按「確定送出」');
-      } catch (e) {
-        panelDone('⚠ 無法自動填入');
-        updatePanel(9, 9, '請手動填寫身分證', true);
-      }
-    };
+      }, 800);
+    } catch (e) {
+      window.location.href = formUrl;
+    }
   }
 
   function addPanelButtons(url) {
@@ -147,7 +148,7 @@
     idBtn.onclick = function() {
       idBtn.disabled = true;
       idBtn.textContent = '載入中...';
-      openFormInIframe(url);
+      goToFormPage(url);
     };
     wrap.appendChild(idBtn);
 
@@ -157,8 +158,6 @@
       + 'background:transparent;color:#fff;font-size:14px;cursor:pointer;';
     closeBtn2.onclick = function() {
       panel.remove();
-      var frame = document.getElementById('quizFormFrame');
-      if (frame) frame.remove();
     };
     wrap.appendChild(closeBtn2);
 
@@ -399,7 +398,6 @@
   var pageText = document.body ? document.body.innerText : '';
   var isFormPage = pageText.indexOf('身分證字號') > -1 && pageText.indexOf('驗證碼') > -1;
   var isQuizPage = window.location.href.indexOf('gameplay') > -1 && document.querySelector('.question2');
-
   if (isFormPage) {
     fillIDForm();
   } else if (isQuizPage) {
