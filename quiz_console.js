@@ -1,6 +1,7 @@
 /*
  * 國防部全民國防教育有獎徵答 — 自動答題腳本（瀏覽器 Console 版）
  * 使用 fetch 在背景送表單，頁面不重新載入，腳本全程不中斷。
+ * 第 9 題答對後用真實表單提交跳轉到個資表單頁。
  *
  * 使用方式：
  *   1. 開 https://gpwd.mnd.gov.tw/reward/gameindex.aspx → 點「開始答題 Go」
@@ -67,7 +68,6 @@
       });
 
     // 從 inline script 判斷狀態
-    // 頁面底部有 <script>Show1();</script> 或 Show2() 或 Show3()
     var state = 'other';
     if (/\bShow2\(\);/.test(html)) state = 'correct';
     else if (/\bShow3\(\);/.test(html)) state = 'wrong';
@@ -80,33 +80,38 @@
     return { state: state, question: question, doc: doc };
   }
 
-  // 更新畫面上顯示的題目（讓使用者看到進度）
+  // 更新畫面上顯示的題目
   function updatePage(doc) {
     var srcShow1 = doc.getElementById('Show1');
     var dstShow1 = document.getElementById('Show1');
     if (srcShow1 && dstShow1) {
       dstShow1.innerHTML = srcShow1.innerHTML;
     }
-    // 確保顯示題目區域
     document.getElementById('Show1').style.display = '';
     document.getElementById('Show2').style.display = 'none';
     document.getElementById('Show3').style.display = 'none';
+  }
+
+  // 用真實表單提交（會重新載入頁面）
+  function realSubmit(eventTarget) {
+    document.getElementById('__EVENTTARGET').value = eventTarget;
+    document.getElementById('__EVENTARGUMENT').value = '';
+    document.getElementById('form1').submit();
   }
 
   async function run() {
     var db = loadDB();
     var knownCount = Object.keys(db).length;
 
-    console.log('🚀 自動答題啟動（fetch 版，頁面不重新載入）');
+    console.log('🚀 自動答題啟動');
     console.log('📚 答案庫：' + knownCount + ' 題');
     console.log('⏹ 停止請重新整理頁面\n');
 
-    // 讀取當前頁面上的題目
     var qEl = document.querySelector('.question2');
     var question = qEl ? qEl.innerText.trim() : '';
 
     if (!question) {
-      console.log('⚠ 找不到題目，請確認在答題頁面（gameplay.aspx）');
+      console.log('⚠ 找不到題目，請確認在答題頁面');
       return;
     }
 
@@ -136,43 +141,54 @@
           console.log('  🔍 嘗試 → 選項 ' + choice);
         }
 
-        // 送出答案
-        var html = await post('Ans' + choice);
-        var result = parse(html);
-        await sleep(DELAY);
+        try {
+          // 送出答案
+          var html = await post('Ans' + choice);
+          var result = parse(html);
+          await sleep(DELAY);
+        } catch (err) {
+          console.log('  ⚠ fetch 失敗: ' + err.message + '，改用真實點擊');
+          document.getElementById('Ans' + choice).click();
+          return;
+        }
 
         if (result.state === 'correct') {
-          // ✅ 答對：記錄正確答案
+          // ✅ 答對
           db[question] = { correct: choice, wrong: wrongList };
           saveDB(db);
-          console.log('  ✅ 正確！（選項 ' + choice + '）');
-
-          // 送出「繼續作答」取得下一題
-          var html2 = await post('imgBack2');
-          var result2 = parse(html2);
-          await sleep(DELAY);
-
           done++;
           answered = true;
+          console.log('  ✅ 正確！（選項 ' + choice + '）');
 
-          if (result2.state === 'question' && result2.question) {
-            updatePage(result2.doc);
-            question = result2.question;
-          } else {
-            // 第 9 題答完 → 伺服器回傳個資表單頁，直接顯示
-            question = '';
-            if (done >= 9) {
-              console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
-              console.log('📋 顯示個資表單，請填寫後送出');
-              document.open();
-              document.write(html2);
-              document.close();
-              return;
+          // === 第 9 題答對：用真實表單提交跳到個資頁 ===
+          if (done >= 9) {
+            console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
+            console.log('📋 跳轉到個資表單...');
+            // parse 已更新隱藏欄位，直接用真實 submit 跳轉
+            realSubmit('imgBack2');
+            return;
+          }
+
+          // === 非最後一題：fetch 繼續 ===
+          try {
+            var html2 = await post('imgBack2');
+            var result2 = parse(html2);
+            await sleep(DELAY);
+
+            if (result2.state === 'question' && result2.question) {
+              updatePage(result2.doc);
+              question = result2.question;
+            } else {
+              question = '';
             }
+          } catch (err2) {
+            console.log('  ⚠ 取下一題失敗: ' + err2.message);
+            realSubmit('imgBack2');
+            return;
           }
 
         } else if (result.state === 'wrong') {
-          // ❌ 答錯：記錄錯誤選項，重試
+          // ❌ 答錯
           if (!db[question]) db[question] = { wrong: [] };
           if (!db[question].wrong) db[question].wrong = [];
           if (db[question].wrong.indexOf(choice) < 0) {
@@ -182,36 +198,35 @@
           saveDB(db);
           console.log('  ❌ 選項 ' + choice + ' 錯誤（已記錄）');
 
-          // 送出「繼續作答」回到同一題
-          var html3 = await post('imgBack');
-          var result3 = parse(html3);
-          if (result3.state === 'question') {
-            updatePage(result3.doc);
+          try {
+            var html3 = await post('imgBack');
+            var result3 = parse(html3);
+            if (result3.state === 'question') {
+              updatePage(result3.doc);
+            }
+            await sleep(DELAY);
+          } catch (err3) {
+            console.log('  ⚠ 重試失敗: ' + err3.message);
+            realSubmit('imgBack');
+            return;
           }
-          await sleep(DELAY);
-          // 繼續 while 迴圈試下一個選項
 
         } else {
           console.log('  ⚠ 未知狀態: ' + result.state);
+          console.log('  ⚠ 回應片段: ' + html.substring(html.length - 200));
           question = result.question;
           answered = true;
         }
       }
     }
 
-    var finalCount = Object.keys(db).length;
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🎉 9 題全部完成！');
-    console.log('📚 答案庫累計 ' + finalCount + ' 題');
-    console.log('📋 請填寫個資表單後送出');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('\n🎉 全部完成！答案庫：' + Object.keys(db).length + ' 題');
   }
 
   // 檢查是否在答題頁
   if (window.location.href.indexOf('gameplay') > -1) {
-    run();
+    run().catch(function(e) { console.error('腳本錯誤:', e); });
   } else {
-    // 在首頁，嘗試跳轉到答題頁
     var link = document.querySelector('a[href*="gameplay"]');
     if (link) {
       link.click();
