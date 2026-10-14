@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<title>國防常識自動答題 — Bookmarklet 安裝頁</title>
+<style>
+  body { font-family: "Microsoft JhengHei", sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+  h1 { color: #2c5f2d; }
+  .bookmarklet-link {
+    display: inline-block;
+    padding: 16px 32px;
+    background: linear-gradient(135deg, #2c5f2d, #4a9e4a);
+    color: #fff !important;
+    font-size: 20px;
+    font-weight: bold;
+    text-decoration: none;
+    border-radius: 12px;
+    margin: 20px 0;
+    cursor: grab;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .bookmarklet-link:hover { background: linear-gradient(135deg, #1e4620, #3a8e3a); }
+  .step { background: #fff; padding: 16px 20px; margin: 12px 0; border-radius: 8px; border-left: 4px solid #2c5f2d; }
+  .step b { color: #2c5f2d; }
+  code { background: #e8e8e8; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+  .warn { background: #fff3cd; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 16px 0; }
+  .info { background: #d1ecf1; padding: 12px 16px; border-radius: 8px; border-left: 4px solid #17a2b8; margin: 16px 0; }
+  #status { margin-top: 20px; padding: 12px; background: #fff; border-radius: 8px; }
+  textarea { width: 100%; height: 120px; font-size: 12px; margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<h1>🎖 國防常識自動答題 Bookmarklet</h1>
+
+<p>把下面的按鈕<b>拖到書籤列</b>，之後在答題頁面點一下書籤就自動答題。</p>
+
+<div class="step">
+  <b>步驟 1：</b>顯示書籤列（如果已顯示就跳過）<br>
+  Chrome 按 <code>Ctrl + Shift + B</code>
+</div>
+
+<div class="step">
+  <b>步驟 2：</b>把下面這個按鈕 <b>拖曳</b> 到書籤列上<br>
+  （不要點它，用滑鼠「拖」上去）
+</div>
+
+<p>
+  <a class="bookmarklet-link" href="javascript:void(function(){var DELAY=800;function loadDB(){try{return JSON.parse(localStorage.getItem('quizAnswers'))||{}}catch(e){return{}}}function saveDB(d){localStorage.setItem('quizAnswers',JSON.stringify(d))}function getState(){var s1=document.getElementById('Show1'),s2=document.getElementById('Show2'),s3=document.getElementById('Show3');if(!s1&&!s2&&!s3)return'other';if(s2&&s2.style.display!=='none')return'correct';if(s3&&s3.style.display!=='none')return'wrong';if(s1&&s1.style.display!=='none')return'question';return'other'}function getQ(){var e=document.querySelector('.question2');return e?e.innerText.trim():''}function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}function click(id){var b=document.getElementById(id);if(b){b.click();return true}return false}function waitState(from,t){t=t||8000;return new Promise(function(res){var s=Date.now(),c=setInterval(function(){var n=getState();if(n!==from||Date.now()-s>t){clearInterval(c);res(n)}},200)})}async function doOne(db){var st=getState();if(st==='other')return'done';if(st==='correct'){click('imgBack2');await sleep(DELAY);await waitState('correct');await sleep(300);return'next'}if(st==='wrong'){click('imgBack');await sleep(DELAY);await waitState('wrong');await sleep(300);return'retry'}var q=getQ();if(!q)return'error';var entry=db[q]||{wrong:[]},cor=entry.correct,wl=entry.wrong||[],ch;if(cor){ch=cor;console.log('📖 已知→選項'+ch)}else{ch=[1,2,3,4].find(function(i){return wl.indexOf(i)<0})||1;console.log('🔍 嘗試→選項'+ch)}if(!click('Ans'+ch))return'error';await sleep(DELAY);var r=await waitState('question');await sleep(300);if(r==='correct'){db[q]={correct:ch,wrong:wl};saveDB(db);console.log('✅ 正確（選項'+ch+'）');click('imgBack2');await sleep(DELAY);await waitState('correct');await sleep(300);return'next'}if(r==='wrong'){if(!db[q])db[q]={wrong:[]};if(!db[q].wrong)db[q].wrong=[];if(db[q].wrong.indexOf(ch)<0)db[q].wrong.push(ch);saveDB(db);console.log('❌ 選項'+ch+'錯誤');click('imgBack');await sleep(DELAY);await waitState('wrong');await sleep(300);return'retry'}return'next'}async function run(){var db=loadDB(),k=Object.keys(db).length;console.log('🚀 自動答題啟動｜答案庫：'+k+'題');console.log('⏹ 要停止請重新整理頁面');var done=0;for(var i=0;i<50;i++){var q=getQ();if(getState()==='question'){var s=q.length>40?q.substring(0,40)+'…':q;console.log('['+(done+1)+'/9] '+s)}var r=await doOne(db);if(r==='done'){console.log('✅ 9題全部完成！答案庫：'+Object.keys(db).length+'題');var a=confirm('全部答對！要自動開始下一輪嗎？');if(a){window.location.href=window.location.href.replace(/gameplay\.aspx.*/,'gameindex.aspx')}return}if(r==='next')done++;if(r==='error'){console.log('⚠ 錯誤');return}}console.log('結束，答案庫：'+Object.keys(loadDB()).length+'題')}if(getState()==='other'&&window.location.href.indexOf('gameplay')<0){var links=document.querySelectorAll('a[href*=gameplay]');if(links.length>0){links[0].click()}else{window.location.href=window.location.href.replace(/[^\/]*$/,'gameplay.aspx')}}else{run()}}());">
+    🎖 自動答題
+  </a>
+</p>
+
+<div class="step">
+  <b>步驟 3：使用方式</b><br>
+  ① 開啟 <a href="https://gpwd.mnd.gov.tw/reward/gameindex.aspx" target="_blank">有獎徵答網站</a><br>
+  ② 點「開始答題 Go」進入答題頁<br>
+  ③ 點書籤列上的 <b>「🎖 自動答題」</b><br>
+  ④ 自動答完 9 題後會問你要不要開始下一輪<br>
+  ⑤ 回到答題頁後再點一次書籤就繼續跑
+</div>
+
+<div class="info">
+  <b>💡 答案庫說明：</b><br>
+  • 答案存在瀏覽器 <code>localStorage</code>，關瀏覽器也不會消失<br>
+  • 第一次跑可能會答錯幾題（在學習），之後每題都秒答<br>
+  • 清除答案庫：F12 Console 輸入 <code>localStorage.removeItem('quizAnswers')</code>
+</div>
+
+<div class="warn">
+  <b>⚠ 如果拖曳無效：</b><br>
+  手動建立書籤：右鍵書籤列 →「新增書籤」→ 名稱填 <code>自動答題</code> → 網址貼上下面的程式碼
+</div>
+
+<p><b>手動安裝用程式碼（複製整段貼到書籤網址欄）：</b></p>
+<textarea id="code" readonly onclick="this.select()">javascript:void(function(){var DELAY=800;function loadDB(){try{return JSON.parse(localStorage.getItem('quizAnswers'))||{}}catch(e){return{}}}function saveDB(d){localStorage.setItem('quizAnswers',JSON.stringify(d))}function getState(){var s1=document.getElementById('Show1'),s2=document.getElementById('Show2'),s3=document.getElementById('Show3');if(!s1&&!s2&&!s3)return'other';if(s2&&s2.style.display!=='none')return'correct';if(s3&&s3.style.display!=='none')return'wrong';if(s1&&s1.style.display!=='none')return'question';return'other'}function getQ(){var e=document.querySelector('.question2');return e?e.innerText.trim():''}function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}function click(id){var b=document.getElementById(id);if(b){b.click();return true}return false}function waitState(from,t){t=t||8000;return new Promise(function(res){var s=Date.now(),c=setInterval(function(){var n=getState();if(n!==from||Date.now()-s>t){clearInterval(c);res(n)}},200)})}async function doOne(db){var st=getState();if(st==='other')return'done';if(st==='correct'){click('imgBack2');await sleep(DELAY);await waitState('correct');await sleep(300);return'next'}if(st==='wrong'){click('imgBack');await sleep(DELAY);await waitState('wrong');await sleep(300);return'retry'}var q=getQ();if(!q)return'error';var entry=db[q]||{wrong:[]},cor=entry.correct,wl=entry.wrong||[],ch;if(cor){ch=cor;console.log('📖 已知→選項'+ch)}else{ch=[1,2,3,4].find(function(i){return wl.indexOf(i)<0})||1;console.log('🔍 嘗試→選項'+ch)}if(!click('Ans'+ch))return'error';await sleep(DELAY);var r=await waitState('question');await sleep(300);if(r==='correct'){db[q]={correct:ch,wrong:wl};saveDB(db);console.log('✅ 正確（選項'+ch+'）');click('imgBack2');await sleep(DELAY);await waitState('correct');await sleep(300);return'next'}if(r==='wrong'){if(!db[q])db[q]={wrong:[]};if(!db[q].wrong)db[q].wrong=[];if(db[q].wrong.indexOf(ch)<0)db[q].wrong.push(ch);saveDB(db);console.log('❌ 選項'+ch+'錯誤');click('imgBack');await sleep(DELAY);await waitState('wrong');await sleep(300);return'retry'}return'next'}async function run(){var db=loadDB(),k=Object.keys(db).length;console.log('🚀 自動答題啟動｜答案庫：'+k+'題');console.log('⏹ 要停止請重新整理頁面');var done=0;for(var i=0;i<50;i++){var q=getQ();if(getState()==='question'){var s=q.length>40?q.substring(0,40)+'…':q;console.log('['+(done+1)+'/9] '+s)}var r=await doOne(db);if(r==='done'){console.log('✅ 9題全部完成！答案庫：'+Object.keys(db).length+'題');var a=confirm('全部答對！要自動開始下一輪嗎？');if(a){window.location.href=window.location.href.replace(/gameplay\.aspx.*/,'gameindex.aspx')}return}if(r==='next')done++;if(r==='error'){console.log('⚠ 錯誤');return}}console.log('結束，答案庫：'+Object.keys(loadDB()).length+'題')}if(getState()==='other'&&window.location.href.indexOf('gameplay')<0){var links=document.querySelectorAll('a[href*=gameplay]');if(links.length>0){links[0].click()}else{window.location.href=window.location.href.replace(/[^\/]*$/,'gameplay.aspx')}}else{run()}}());</textarea>
+
+</body>
+</html>
