@@ -1,16 +1,16 @@
 /*
  * 國防部全民國防教育有獎徵答 — 自動答題腳本（瀏覽器 Console 版）
- * 半自動模式：前 8 題用 fetch 背景自動答，第 9 題顯示在畫面讓你手動點。
+ * 半自動模式：前 8 題自動答，第 9 題手動點，個資頁自動帶入身分證。
  *
  * 使用方式：
  *   1. 開 https://gpwd.mnd.gov.tw/reward/gameindex.aspx → 點「開始答題 Go」
  *   2. 按 F12 → Console（手機 Safari 用書籤版）
  *   3. 貼上這整段，按 Enter
- *   4. 自動答 8 題 → 第 9 題會提示你手動點答案
+ *   4. 自動答 8 題 → 第 9 題手動點 → 個資頁自動填身分證
  *
- * 答案庫存在 localStorage，關瀏覽器/重開機都不會消失。
- * 清除答案庫：localStorage.removeItem('quizAnswers')
- * 查看答案庫：JSON.parse(localStorage.getItem('quizAnswers'))
+ * 資料存在 localStorage（只在你的瀏覽器裡，不會上傳）：
+ *   答案庫：localStorage.removeItem('quizAnswers')
+ *   身分證：localStorage.removeItem('quizUserID')
  */
 
 (function () {
@@ -83,7 +83,6 @@
     document.getElementById('Show3').style.display = 'none';
   }
 
-  // 第 9 題：同步頁面所有隱藏欄位到 form1，讓手動點擊能正常送出
   function syncFormFields() {
     var form = document.getElementById('form1');
     if (!form) return;
@@ -95,6 +94,35 @@
         formEl.value = el.value;
       }
     });
+  }
+
+  // ═══ 個資表單頁：自動帶入身分證 ═══
+  function fillIDForm() {
+    var idInput = document.querySelector('input[placeholder*="身分證"]')
+      || document.querySelector('input[name*="id" i]')
+      || document.querySelector('input[name*="ID"]');
+
+    if (!idInput) return false;
+
+    var savedID = localStorage.getItem('quizUserID') || '';
+
+    if (!savedID) {
+      savedID = prompt('請輸入身分證字號（會記住，下次自動帶入）：');
+      if (savedID && savedID.trim()) {
+        savedID = savedID.trim().toUpperCase();
+        localStorage.setItem('quizUserID', savedID);
+      } else {
+        return true;
+      }
+    }
+
+    idInput.value = savedID;
+    idInput.dispatchEvent(new Event('input', { bubbles: true }));
+    idInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    console.log('✅ 身分證已自動填入：' + savedID.charAt(0) + '***' + savedID.slice(-2));
+    alert('身分證已自動填入，請輸入驗證碼後按「確定送出」');
+    return true;
   }
 
   async function run() {
@@ -227,7 +255,14 @@
     }
   }
 
-  if (window.location.href.indexOf('gameplay') > -1) {
+  // ═══ 判斷目前在哪個頁面 ═══
+  var pageText = document.body ? document.body.innerText : '';
+  var isFormPage = pageText.indexOf('身分證字號') > -1 && pageText.indexOf('驗證碼') > -1;
+  var isQuizPage = window.location.href.indexOf('gameplay') > -1 && document.querySelector('.question2');
+
+  if (isFormPage) {
+    fillIDForm();
+  } else if (isQuizPage) {
     run().catch(function(e) { console.error('腳本錯誤:', e); });
   } else {
     var link = document.querySelector('a[href*="gameplay"]');
