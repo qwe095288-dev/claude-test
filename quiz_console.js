@@ -18,6 +18,70 @@
 
   var DELAY = 600;
 
+  // ═══ 浮動狀態面板 ═══
+  function createPanel() {
+    var old = document.getElementById('quizPanel');
+    if (old) old.remove();
+
+    var panel = document.createElement('div');
+    panel.id = 'quizPanel';
+    panel.style.cssText = 'position:fixed;top:16px;right:16px;z-index:99999;'
+      + 'background:linear-gradient(135deg,#1a3a1a,#2c5f2d);color:#fff;'
+      + 'padding:16px 20px;border-radius:14px;font-family:"Microsoft JhengHei",sans-serif;'
+      + 'font-size:15px;min-width:220px;box-shadow:0 6px 24px rgba(0,0,0,0.35);'
+      + 'line-height:1.6;transition:opacity 0.3s;';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:18px;font-weight:bold;margin-bottom:8px;';
+    title.textContent = '🎖 自動答題中...';
+    panel.appendChild(title);
+
+    var progress = document.createElement('div');
+    progress.id = 'quizProgress';
+    progress.style.cssText = 'margin-bottom:8px;';
+    progress.textContent = '準備開始...';
+    panel.appendChild(progress);
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'background:rgba(255,255,255,0.2);border-radius:8px;height:10px;overflow:hidden;';
+    var fill = document.createElement('div');
+    fill.id = 'quizBar';
+    fill.style.cssText = 'background:linear-gradient(90deg,#4ade80,#22c55e);height:100%;width:0%;'
+      + 'border-radius:8px;transition:width 0.4s ease;';
+    bar.appendChild(fill);
+    panel.appendChild(bar);
+
+    var log = document.createElement('div');
+    log.id = 'quizLog';
+    log.style.cssText = 'margin-top:10px;font-size:13px;opacity:0.85;max-height:120px;overflow-y:auto;';
+    panel.appendChild(log);
+
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  function updatePanel(done, total, msg, isError) {
+    var progress = document.getElementById('quizProgress');
+    var bar = document.getElementById('quizBar');
+    var log = document.getElementById('quizLog');
+    if (progress) progress.textContent = done + ' / ' + total + ' 題';
+    if (bar) bar.style.width = Math.round((done / total) * 100) + '%';
+    if (log && msg) {
+      var line = document.createElement('div');
+      line.textContent = msg;
+      if (isError) line.style.color = '#fca5a5';
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  function panelDone(msg) {
+    var title = document.querySelector('#quizPanel > div:first-child');
+    if (title) title.textContent = msg || '🎉 完成！';
+    var bar = document.getElementById('quizBar');
+    if (bar) bar.style.width = '100%';
+  }
+
   function loadDB() {
     try { return JSON.parse(localStorage.getItem('quizAnswers')) || {}; }
     catch (e) { return {}; }
@@ -117,15 +181,17 @@
     var db = loadDB();
     var knownCount = Object.keys(db).length;
 
+    createPanel();
+    updatePanel(0, 9, '答案庫：' + knownCount + ' 題');
+
     console.log('🚀 全自動答題啟動');
     console.log('📚 答案庫：' + knownCount + ' 題');
-    console.log('⏹ 停止請重新整理頁面\n');
 
     var qEl = document.querySelector('.question2');
     var question = qEl ? qEl.innerText.trim() : '';
 
     if (!question) {
-      console.log('⚠ 找不到題目，請確認在答題頁面');
+      updatePanel(0, 9, '找不到題目', true);
       return;
     }
 
@@ -133,12 +199,11 @@
 
     while (done < 9) {
       if (!question) {
-        console.log('⚠ 題目為空，中斷');
+        updatePanel(done, 9, '題目為空，中斷', true);
         break;
       }
 
-      var short = question.length > 40 ? question.substring(0, 40) + '…' : question;
-      console.log('[' + (done + 1) + '/9] ' + short);
+      var short = question.length > 30 ? question.substring(0, 30) + '…' : question;
 
       var entry = db[question] || { wrong: [] };
       var wrongList = entry.wrong || [];
@@ -149,10 +214,10 @@
 
         if (entry.correct) {
           choice = entry.correct;
-          console.log('  📖 已知答案 → 選項 ' + choice);
+          updatePanel(done, 9, 'Q' + (done + 1) + ' 已知→' + choice);
         } else {
           choice = [1, 2, 3, 4].find(function (i) { return wrongList.indexOf(i) < 0; }) || 1;
-          console.log('  🔍 嘗試 → 選項 ' + choice);
+          updatePanel(done, 9, 'Q' + (done + 1) + ' 嘗試→' + choice);
         }
 
         var resp, result;
@@ -161,7 +226,7 @@
           result = parse(resp.text);
           await sleep(DELAY);
         } catch (err) {
-          console.log('  ⚠ fetch 失敗: ' + err.message);
+          updatePanel(done, 9, '網路錯誤: ' + err.message, true);
           return;
         }
 
@@ -170,30 +235,21 @@
           saveDB(db);
           done++;
           answered = true;
-          console.log('  ✅ 正確！（選項 ' + choice + '）');
+          updatePanel(done, 9, 'Q' + done + ' ✔ 選項' + choice);
 
-          // ═══ 第 9 題答對：跳轉到 complete.aspx 個資表單 ═══
           if (done >= 9) {
-            console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
-            console.log('📋 跳轉到個資表單...');
-
-            // 先 fetch imgBack2 推進 server 狀態
+            panelDone('🎉 9 題完成！跳轉中...');
             try {
               var nextResp = await post('imgBack2');
-              // 檢查是否已跳轉到 complete.aspx
               if (nextResp.url && nextResp.url.indexOf('complete') > -1) {
-                console.log('📋 偵測到 complete.aspx，直接跳轉');
                 window.location.href = nextResp.url;
                 return;
               }
             } catch (e) {}
-
-            // 備援：直接導航到 complete.aspx
             window.location.href = './complete.aspx';
             return;
           }
 
-          // ═══ 非最後一題：fetch 取下一題 ═══
           try {
             var resp2 = await post('imgBack2');
             var result2 = parse(resp2.text);
@@ -203,14 +259,14 @@
               updatePage(result2.doc);
               question = result2.question;
             } else if (resp2.url && resp2.url.indexOf('complete') > -1) {
-              console.log('📋 提前完成，跳轉到個資表單');
+              panelDone('🎉 完成！跳轉中...');
               window.location.href = resp2.url;
               return;
             } else {
               question = '';
             }
           } catch (err2) {
-            console.log('  ⚠ 取下一題失敗');
+            updatePanel(done, 9, '取下一題失敗', true);
             return;
           }
 
@@ -222,7 +278,7 @@
           }
           wrongList = db[question].wrong;
           saveDB(db);
-          console.log('  ❌ 選項 ' + choice + ' 錯誤（已記錄）');
+          updatePanel(done, 9, 'Q' + (done + 1) + ' ✘ 選項' + choice + ' 重試');
 
           try {
             var resp3 = await post('imgBack');
@@ -232,15 +288,13 @@
             }
             await sleep(DELAY);
           } catch (err3) {
-            console.log('  ⚠ 重試失敗');
+            updatePanel(done, 9, '重試失敗', true);
             return;
           }
 
         } else {
-          console.log('  ⚠ 未知狀態: ' + result.state);
-          // 可能已經是完成頁
           if (resp.url && resp.url.indexOf('complete') > -1) {
-            console.log('📋 偵測到完成頁，跳轉');
+            panelDone('🎉 完成！跳轉中...');
             window.location.href = resp.url;
             return;
           }
@@ -250,8 +304,7 @@
       }
     }
 
-    console.log('\n🎉 全部完成！答案庫：' + Object.keys(db).length + ' 題');
-    // 嘗試跳轉到個資頁
+    panelDone();
     window.location.href = './complete.aspx';
   }
 
