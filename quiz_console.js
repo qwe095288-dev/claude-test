@@ -1,7 +1,7 @@
 /*
  * 國防部全民國防教育有獎徵答 — 自動答題腳本（瀏覽器 Console 版）
  * 使用 fetch 在背景送表單，頁面不重新載入，腳本全程不中斷。
- * 第 9 題答對後用真實表單提交跳轉到個資表單頁。
+ * 第 9 題答對後建立乾淨表單提交，跳轉到個資表單頁。
  *
  * 使用方式：
  *   1. 開 https://gpwd.mnd.gov.tw/reward/gameindex.aspx → 點「開始答題 Go」
@@ -92,11 +92,34 @@
     document.getElementById('Show3').style.display = 'none';
   }
 
-  // 用真實表單提交（會重新載入頁面）
-  function realSubmit(eventTarget) {
-    document.getElementById('__EVENTTARGET').value = eventTarget;
-    document.getElementById('__EVENTARGUMENT').value = '';
-    document.getElementById('form1').submit();
+  // 建立乾淨的表單提交（避免舊 form1 裡的髒欄位干擾）
+  function cleanSubmit(eventTarget) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = './gameplay.aspx';
+
+    var fields = {
+      '__EVENTTARGET': eventTarget,
+      '__EVENTARGUMENT': '',
+      '__VIEWSTATE': document.getElementById('__VIEWSTATE').value,
+      '__VIEWSTATEGENERATOR': document.getElementById('__VIEWSTATEGENERATOR').value,
+      '__EVENTVALIDATION': document.getElementById('__EVENTVALIDATION').value,
+      '__SCROLLPOSITIONX': '0',
+      '__SCROLLPOSITIONY': '0'
+    };
+    var csrf = document.getElementById('CSRFToken');
+    if (csrf) fields['CSRFToken'] = csrf.value;
+
+    for (var name in fields) {
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = fields[name];
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
   }
 
   async function run() {
@@ -141,10 +164,11 @@
           console.log('  🔍 嘗試 → 選項 ' + choice);
         }
 
+        var html, result;
         try {
-          // 送出答案
-          var html = await post('Ans' + choice);
-          var result = parse(html);
+          html = await post('Ans' + choice);
+          result = parse(html);
+          console.log('  📡 狀態: ' + result.state);
           await sleep(DELAY);
         } catch (err) {
           console.log('  ⚠ fetch 失敗: ' + err.message + '，改用真實點擊');
@@ -153,42 +177,40 @@
         }
 
         if (result.state === 'correct') {
-          // ✅ 答對
           db[question] = { correct: choice, wrong: wrongList };
           saveDB(db);
           done++;
           answered = true;
-          console.log('  ✅ 正確！（選項 ' + choice + '）');
+          console.log('  ✅ 正確！（選項 ' + choice + '）done=' + done);
 
-          // === 第 9 題答對：用真實表單提交跳到個資頁 ===
           if (done >= 9) {
             console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
             console.log('📋 跳轉到個資表單...');
-            // parse 已更新隱藏欄位，直接用真實 submit 跳轉
-            realSubmit('imgBack2');
+            cleanSubmit('imgBack2');
             return;
           }
 
-          // === 非最後一題：fetch 繼續 ===
           try {
             var html2 = await post('imgBack2');
             var result2 = parse(html2);
+            console.log('  📡 下一題狀態: ' + result2.state);
             await sleep(DELAY);
 
             if (result2.state === 'question' && result2.question) {
               updatePage(result2.doc);
               question = result2.question;
             } else {
-              question = '';
+              console.log('  ⚠ 下一題回應非 question，嘗試跳轉');
+              cleanSubmit('imgBack2');
+              return;
             }
           } catch (err2) {
             console.log('  ⚠ 取下一題失敗: ' + err2.message);
-            realSubmit('imgBack2');
+            cleanSubmit('imgBack2');
             return;
           }
 
         } else if (result.state === 'wrong') {
-          // ❌ 答錯
           if (!db[question]) db[question] = { wrong: [] };
           if (!db[question].wrong) db[question].wrong = [];
           if (db[question].wrong.indexOf(choice) < 0) {
@@ -207,13 +229,18 @@
             await sleep(DELAY);
           } catch (err3) {
             console.log('  ⚠ 重試失敗: ' + err3.message);
-            realSubmit('imgBack');
+            cleanSubmit('imgBack');
             return;
           }
 
         } else {
           console.log('  ⚠ 未知狀態: ' + result.state);
-          console.log('  ⚠ 回應片段: ' + html.substring(html.length - 200));
+          console.log('  ⚠ 回應末 300 字: ' + html.substring(html.length - 300));
+          if (done >= 8) {
+            console.log('  → 已答 8 題，可能是完成頁，嘗試跳轉');
+            cleanSubmit('imgBack2');
+            return;
+          }
           question = result.question;
           answered = true;
         }
