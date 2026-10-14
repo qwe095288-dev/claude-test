@@ -152,14 +152,24 @@
           var result2 = parse(html2);
           await sleep(DELAY);
 
+          done++;
+          answered = true;
+
           if (result2.state === 'question' && result2.question) {
             updatePage(result2.doc);
             question = result2.question;
           } else {
+            // 第 9 題答完 → 伺服器回傳個資表單頁，直接顯示
             question = '';
+            if (done >= 9) {
+              console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
+              console.log('📋 顯示個資表單，請填寫後送出');
+              document.open();
+              document.write(html2);
+              document.close();
+              return;
+            }
           }
-          done++;
-          answered = true;
 
         } else if (result.state === 'wrong') {
           // ❌ 答錯：記錄錯誤選項，重試
@@ -193,13 +203,8 @@
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🎉 9 題全部完成！');
     console.log('📚 答案庫累計 ' + finalCount + ' 題');
+    console.log('📋 請填寫個資表單後送出');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-    if (confirm('全部答對！要開始下一輪嗎？')) {
-      window.location.href = window.location.href.replace(/gameplay\.aspx.*/, 'gameindex.aspx');
-    } else {
-      window.location.reload();
-    }
   }
 
   // 檢查是否在答題頁
