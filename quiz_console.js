@@ -1,16 +1,16 @@
 /*
  * 國防部全民國防教育有獎徵答 — 自動答題腳本（瀏覽器 Console 版）
- * 半自動模式：前 8 題自動答，第 9 題手動點，個資頁自動帶入身分證。
+ * 全自動 9 題 + 個資頁自動帶入身分證。
  *
  * 使用方式：
  *   1. 開 https://gpwd.mnd.gov.tw/reward/gameindex.aspx → 點「開始答題 Go」
  *   2. 按 F12 → Console（手機 Safari 用書籤版）
  *   3. 貼上這整段，按 Enter
- *   4. 自動答 8 題 → 第 9 題手動點 → 個資頁自動填身分證
+ *   4. 全自動答 9 題 → 跳到個資頁 → 再點一次書籤自動填身分證
  *
  * 資料存在 localStorage（只在你的瀏覽器裡，不會上傳）：
- *   答案庫：localStorage.removeItem('quizAnswers')
- *   身分證：localStorage.removeItem('quizUserID')
+ *   清除答案庫：localStorage.removeItem('quizAnswers')
+ *   清除身分證：localStorage.removeItem('quizUserID')
  */
 
 (function () {
@@ -46,9 +46,10 @@
     var resp = await fetch('./gameplay.aspx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: fd.toString()
+      body: fd.toString(),
+      redirect: 'follow'
     });
-    return await resp.text();
+    return { text: await resp.text(), url: resp.url };
   }
 
   function parse(html) {
@@ -81,19 +82,6 @@
     document.getElementById('Show1').style.display = '';
     document.getElementById('Show2').style.display = 'none';
     document.getElementById('Show3').style.display = 'none';
-  }
-
-  function syncFormFields() {
-    var form = document.getElementById('form1');
-    if (!form) return;
-    var fields = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', 'CSRFToken'];
-    fields.forEach(function (id) {
-      var el = document.getElementById(id);
-      var formEl = form.querySelector('[name="' + id + '"]');
-      if (el && formEl && formEl !== el) {
-        formEl.value = el.value;
-      }
-    });
   }
 
   // ═══ 個資表單頁：自動帶入身分證 ═══
@@ -129,8 +117,9 @@
     var db = loadDB();
     var knownCount = Object.keys(db).length;
 
-    console.log('🚀 半自動答題啟動（前 8 題自動，第 9 題手動）');
-    console.log('📚 答案庫：' + knownCount + ' 題\n');
+    console.log('🚀 全自動答題啟動');
+    console.log('📚 答案庫：' + knownCount + ' 題');
+    console.log('⏹ 停止請重新整理頁面\n');
 
     var qEl = document.querySelector('.question2');
     var question = qEl ? qEl.innerText.trim() : '';
@@ -142,7 +131,7 @@
 
     var done = 0;
 
-    while (done < 8) {
+    while (done < 9) {
       if (!question) {
         console.log('⚠ 題目為空，中斷');
         break;
@@ -166,10 +155,10 @@
           console.log('  🔍 嘗試 → 選項 ' + choice);
         }
 
-        var html, result;
+        var resp, result;
         try {
-          html = await post('Ans' + choice);
-          result = parse(html);
+          resp = await post('Ans' + choice);
+          result = parse(resp.text);
           await sleep(DELAY);
         } catch (err) {
           console.log('  ⚠ fetch 失敗: ' + err.message);
@@ -183,14 +172,40 @@
           answered = true;
           console.log('  ✅ 正確！（選項 ' + choice + '）');
 
+          // ═══ 第 9 題答對：跳轉到 complete.aspx 個資表單 ═══
+          if (done >= 9) {
+            console.log('\n🎉 9 題全部完成！答案庫：' + Object.keys(db).length + ' 題');
+            console.log('📋 跳轉到個資表單...');
+
+            // 先 fetch imgBack2 推進 server 狀態
+            try {
+              var nextResp = await post('imgBack2');
+              // 檢查是否已跳轉到 complete.aspx
+              if (nextResp.url && nextResp.url.indexOf('complete') > -1) {
+                console.log('📋 偵測到 complete.aspx，直接跳轉');
+                window.location.href = nextResp.url;
+                return;
+              }
+            } catch (e) {}
+
+            // 備援：直接導航到 complete.aspx
+            window.location.href = './complete.aspx';
+            return;
+          }
+
+          // ═══ 非最後一題：fetch 取下一題 ═══
           try {
-            var html2 = await post('imgBack2');
-            var result2 = parse(html2);
+            var resp2 = await post('imgBack2');
+            var result2 = parse(resp2.text);
             await sleep(DELAY);
 
             if (result2.state === 'question' && result2.question) {
               updatePage(result2.doc);
               question = result2.question;
+            } else if (resp2.url && resp2.url.indexOf('complete') > -1) {
+              console.log('📋 提前完成，跳轉到個資表單');
+              window.location.href = resp2.url;
+              return;
             } else {
               question = '';
             }
@@ -210,8 +225,8 @@
           console.log('  ❌ 選項 ' + choice + ' 錯誤（已記錄）');
 
           try {
-            var html3 = await post('imgBack');
-            var result3 = parse(html3);
+            var resp3 = await post('imgBack');
+            var result3 = parse(resp3.text);
             if (result3.state === 'question') {
               updatePage(result3.doc);
             }
@@ -223,36 +238,21 @@
 
         } else {
           console.log('  ⚠ 未知狀態: ' + result.state);
+          // 可能已經是完成頁
+          if (resp.url && resp.url.indexOf('complete') > -1) {
+            console.log('📋 偵測到完成頁，跳轉');
+            window.location.href = resp.url;
+            return;
+          }
           question = result.question;
           answered = true;
         }
       }
     }
 
-    // ═══ 第 9 題：交給使用者手動作答 ═══
-    if (done === 8 && question) {
-      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🖐 第 9 題請手動作答！');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      syncFormFields();
-
-      var entry9 = db[question] || { wrong: [] };
-      if (entry9.correct) {
-        var msg = '第 9 題請手動點選項 ' + entry9.correct + '（已知正確答案）';
-        console.log('📖 ' + msg);
-        alert(msg);
-      } else {
-        var tried = (entry9.wrong || []).join(', ');
-        var suggestion = [1, 2, 3, 4].find(function (i) { return (entry9.wrong || []).indexOf(i) < 0; }) || 1;
-        var msg2 = '第 9 題請手動作答。建議試選項 ' + suggestion;
-        if (tried) msg2 += '（已知錯誤：' + tried + '）';
-        console.log('🔍 ' + msg2);
-        alert(msg2);
-      }
-    } else {
-      console.log('\n🎉 答題結束！答案庫：' + Object.keys(db).length + ' 題');
-    }
+    console.log('\n🎉 全部完成！答案庫：' + Object.keys(db).length + ' 題');
+    // 嘗試跳轉到個資頁
+    window.location.href = './complete.aspx';
   }
 
   // ═══ 判斷目前在哪個頁面 ═══
