@@ -31,10 +31,21 @@
       + 'font-size:15px;min-width:220px;box-shadow:0 6px 24px rgba(0,0,0,0.35);'
       + 'line-height:1.6;transition:opacity 0.3s;';
 
+    var header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
     var title = document.createElement('div');
-    title.style.cssText = 'font-size:18px;font-weight:bold;margin-bottom:8px;';
+    title.id = 'quizTitle';
+    title.style.cssText = 'font-size:18px;font-weight:bold;';
     title.textContent = '🎖 自動答題中...';
-    panel.appendChild(title);
+    header.appendChild(title);
+    var closeBtn = document.createElement('div');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'cursor:pointer;font-size:18px;opacity:0.7;padding:0 0 0 12px;';
+    closeBtn.onmouseover = function() { closeBtn.style.opacity = '1'; };
+    closeBtn.onmouseout = function() { closeBtn.style.opacity = '0.7'; };
+    closeBtn.onclick = function() { panel.remove(); };
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
 
     var progress = document.createElement('div');
     progress.id = 'quizProgress';
@@ -76,10 +87,38 @@
   }
 
   function panelDone(msg) {
-    var title = document.querySelector('#quizPanel > div:first-child');
+    var title = document.getElementById('quizTitle');
     if (title) title.textContent = msg || '🎉 完成！';
     var bar = document.getElementById('quizBar');
     if (bar) bar.style.width = '100%';
+  }
+
+  function addPanelButtons(url) {
+    var panel = document.getElementById('quizPanel');
+    if (!panel) return;
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:12px;display:flex;gap:8px;';
+
+    var idBtn = document.createElement('button');
+    idBtn.textContent = '📋 前往填寫個資';
+    idBtn.style.cssText = 'flex:1;padding:10px;border:none;border-radius:8px;'
+      + 'background:#4ade80;color:#1a3a1a;font-size:15px;font-weight:bold;cursor:pointer;';
+    idBtn.onmouseover = function() { idBtn.style.background = '#22c55e'; };
+    idBtn.onmouseout = function() { idBtn.style.background = '#4ade80'; };
+    idBtn.onclick = function() {
+      sessionStorage.setItem('quizAutoFill', '1');
+      window.location.href = url || './complete.aspx';
+    };
+    wrap.appendChild(idBtn);
+
+    var closeBtn2 = document.createElement('button');
+    closeBtn2.textContent = '關閉';
+    closeBtn2.style.cssText = 'padding:10px 16px;border:1px solid rgba(255,255,255,0.3);border-radius:8px;'
+      + 'background:transparent;color:#fff;font-size:14px;cursor:pointer;';
+    closeBtn2.onclick = function() { panel.remove(); };
+    wrap.appendChild(closeBtn2);
+
+    panel.appendChild(wrap);
   }
 
   function loadDB() {
@@ -173,7 +212,11 @@
     idInput.dispatchEvent(new Event('change', { bubbles: true }));
 
     console.log('✅ 身分證已自動填入：' + savedID.charAt(0) + '***' + savedID.slice(-2));
-    alert('身分證已自動填入，請輸入驗證碼後按「確定送出」');
+
+    createPanel();
+    panelDone('✅ 身分證已填入');
+    updatePanel(9, 9, '身分證：' + savedID.charAt(0) + '***' + savedID.slice(-2));
+    updatePanel(9, 9, '請輸入驗證碼後按「確定送出」');
     return true;
   }
 
@@ -238,15 +281,15 @@
           updatePanel(done, 9, 'Q' + done + ' ✔ 選項' + choice);
 
           if (done >= 9) {
-            panelDone('🎉 9 題完成！跳轉中...');
+            panelDone('🎉 9 題完成！');
+            var completeUrl = './complete.aspx';
             try {
               var nextResp = await post('imgBack2');
               if (nextResp.url && nextResp.url.indexOf('complete') > -1) {
-                window.location.href = nextResp.url;
-                return;
+                completeUrl = nextResp.url;
               }
             } catch (e) {}
-            window.location.href = './complete.aspx';
+            addPanelButtons(completeUrl);
             return;
           }
 
@@ -259,8 +302,8 @@
               updatePage(result2.doc);
               question = result2.question;
             } else if (resp2.url && resp2.url.indexOf('complete') > -1) {
-              panelDone('🎉 完成！跳轉中...');
-              window.location.href = resp2.url;
+              panelDone('🎉 完成！');
+              addPanelButtons(resp2.url);
               return;
             } else {
               question = '';
@@ -294,8 +337,8 @@
 
         } else {
           if (resp.url && resp.url.indexOf('complete') > -1) {
-            panelDone('🎉 完成！跳轉中...');
-            window.location.href = resp.url;
+            panelDone('🎉 完成！');
+            addPanelButtons(resp.url);
             return;
           }
           question = result.question;
@@ -304,8 +347,8 @@
       }
     }
 
-    panelDone();
-    window.location.href = './complete.aspx';
+    panelDone('🎉 完成！');
+    addPanelButtons('./complete.aspx');
   }
 
   // ═══ 判斷目前在哪個頁面 ═══
