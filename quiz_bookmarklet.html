@@ -51,28 +51,44 @@
 </p>
 
 <div class="step">
-  <b>步驟 3：使用方式</b><br>
-  ① 開啟 <a href="https://gpwd.mnd.gov.tw/reward/gameindex.aspx" target="_blank">有獎徵答網站</a><br>
-  ② 點「開始答題 Go」進入答題頁<br>
-  ③ 點書籤列上的 <b>「🎖 自動答題」</b><br>
-  ④ 右上角出現浮動面板，9 題全自動<br>
-  ⑤ 完成後點 <b>「前往填寫個資」</b> → 自動載入個資頁並填入身分證<br>
-  ⑥ 你只需輸入驗證碼、按送出（全程只點一次書籤）
+  <b>電腦版使用</b><br>
+  ① 開啟<a href="https://gpwd.mnd.gov.tw/reward/gameindex.aspx" target="_blank">有獎徵答網站</a> → 點「開始答題 Go」<br>
+  ② 點書籤列上的 <b>「🎖 自動答題」</b><br>
+  ③ 等右上角面板跑完 9 題 → 點「前往填寫個資」<br>
+  ④ 身分證自動填好，輸入驗證碼按送出即可
 </div>
 
-<div class="info">
-  <b>💡 原理說明：</b><br>
-  • 9 題全部用 <code>fetch</code> 背景自動答，不重新載入頁面<br>
-  • 右上角浮動面板即時顯示進度（第幾題、正確/錯誤、進度條）<br>
-  • 面板右上角 ✕ 可隨時關閉<br>
-  • 完成後用 fetch 抓取個資頁並直接寫入，腳本不中斷，自動填入身分證<br>
-  • 身分證存 <code>localStorage</code>（只在你的瀏覽器，不會上傳）<br>
-  • 答案庫同樣存 <code>localStorage</code>，關瀏覽器不消失
+<hr style="border:none;border-top:2px solid #2c5f2d;margin:28px 0;">
+
+<h2 style="color:#2c5f2d;">📱 手機版安裝與使用</h2>
+
+<div class="step">
+  <b>iPhone Safari</b><br>
+  ① 先隨便加一個書籤（例如把這個頁面加入書籤）<br>
+  ② 點下方 <b>程式碼框</b> → 全選 → 複製<br>
+  ③ 打開書籤 → 找到剛才存的書籤 → 點「編輯」<br>
+  ④ 把網址欄<b>清空</b>，貼上複製的程式碼 → 儲存<br>
+  ⑤ 書籤名稱可改成「自動答題」方便辨認
+</div>
+
+<div class="step">
+  <b>Android Chrome / Brave</b><br>
+  ① 點下方 <b>程式碼框</b> → 全選 → 複製<br>
+  ② 在網址列輸入任意網址 → 加入書籤<br>
+  ③ 打開書籤管理 → 編輯該書籤 → 網址欄貼上程式碼 → 儲存
+</div>
+
+<div class="step">
+  <b>手機使用方式（安裝好之後）</b><br>
+  ① 用瀏覽器開<a href="https://gpwd.mnd.gov.tw/reward/gameindex.aspx" target="_blank">有獎徵答</a> → 點「開始答題 Go」<br>
+  ② 點網址列 → 輸入「自動答題」找到書籤 → 點它<br>
+  ③ 右上角面板自動跑完 9 題<br>
+  ④ 點「前往填寫個資」→ 身分證自動帶入<br>
+  ⑤ 輸入驗證碼、按送出，完成
 </div>
 
 <div class="warn">
-  <b>⚠ 如果拖曳無效（或 iPhone Safari）：</b><br>
-  手動建立書籤 → 網址貼上下面的程式碼
+  <b>⚠ 注意：</b>iPhone Safari 點書籤時，要從<b>網址列打字搜尋書籤名稱</b>來觸發，不能從書籤頁面直接點（Safari 限制）。
 </div>
 
 <p><b>手動安裝用程式碼（複製整段貼到書籤網址欄）：</b></p>
